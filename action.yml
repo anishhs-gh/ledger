@@ -1,0 +1,89 @@
+name: 'Ledger Release Notes'
+description: 'Generate AI-powered release notes from git history (commits + diffs).'
+author: 'anishhs'
+branding:
+  icon: 'file-text'
+  color: 'purple'
+
+inputs:
+  provider:
+    description: 'AI provider: openai | anthropic | gemini | openrouter | ollama | bedrock | openai-compatible'
+    required: false
+  model:
+    description: 'Model name (a sensible default is used per provider when omitted; required for openai-compatible)'
+    required: false
+  base-url:
+    description: 'OpenAI-compatible API base URL (for provider openai-compatible), e.g. https://api.groq.com/openai/v1'
+    required: false
+  api-key:
+    description: 'Provider API key; exported to the correct *_API_KEY variable. Pass a secret.'
+    required: false
+  audience:
+    description: 'Target audience: engineering | business | qa'
+    required: false
+    default: 'engineering'
+  output:
+    description: 'Output format: markdown | json'
+    required: false
+    default: 'markdown'
+  output-file:
+    description: 'Write the notes to this file (also appended to the job step summary)'
+    required: false
+  args:
+    description: 'Extra raw arguments appended to `ledger generate` (e.g. "--since-last-tag --fail-on-empty")'
+    required: false
+    default: ''
+  package:
+    description: 'npm package spec to run (pin a version, e.g. @anishhs/ledger@1.0.0)'
+    required: false
+    default: '@anishhs/ledger'
+
+outputs:
+  file:
+    description: 'Path to the written notes file (equals the output-file input)'
+    value: ${{ inputs.output-file }}
+
+runs:
+  using: composite
+  steps:
+    - name: Generate release notes
+      shell: bash
+      # Inputs are passed via env (not interpolated into the script) to avoid injection.
+      env:
+        INPUT_PROVIDER: ${{ inputs.provider }}
+        INPUT_MODEL: ${{ inputs.model }}
+        INPUT_BASE_URL: ${{ inputs.base-url }}
+        INPUT_API_KEY: ${{ inputs.api-key }}
+        INPUT_AUDIENCE: ${{ inputs.audience }}
+        INPUT_OUTPUT: ${{ inputs.output }}
+        INPUT_OUTPUT_FILE: ${{ inputs.output-file }}
+        INPUT_ARGS: ${{ inputs.args }}
+        INPUT_PACKAGE: ${{ inputs.package }}
+      run: |
+        set -euo pipefail
+
+        # Map a generic api-key input to the provider-specific environment variable.
+        if [ -n "${INPUT_API_KEY:-}" ]; then
+          case "${INPUT_PROVIDER:-}" in
+            openai)            export OPENAI_API_KEY="$INPUT_API_KEY" ;;
+            anthropic)         export ANTHROPIC_API_KEY="$INPUT_API_KEY" ;;
+            gemini)            export GEMINI_API_KEY="$INPUT_API_KEY" ;;
+            openrouter)        export OPENROUTER_API_KEY="$INPUT_API_KEY" ;;
+            bedrock)           export BEDROCK_API_KEY="$INPUT_API_KEY" ;;
+            openai-compatible) export LEDGER_API_KEY="$INPUT_API_KEY" ;;
+            *) echo "::warning::api-key provided but provider '${INPUT_PROVIDER:-}' has no key mapping; ignoring" ;;
+          esac
+        fi
+
+        cmd=(npx --yes "$INPUT_PACKAGE" generate --audience "$INPUT_AUDIENCE" --output "$INPUT_OUTPUT")
+        [ -n "${INPUT_PROVIDER:-}" ]    && cmd+=(--provider "$INPUT_PROVIDER")
+        [ -n "${INPUT_MODEL:-}" ]       && cmd+=(--model "$INPUT_MODEL")
+        [ -n "${INPUT_BASE_URL:-}" ]    && cmd+=(--base-url "$INPUT_BASE_URL")
+        [ -n "${INPUT_OUTPUT_FILE:-}" ] && cmd+=(--output-file "$INPUT_OUTPUT_FILE")
+
+        # Intentional word-splitting of extra args.
+        read -ra extra <<< "${INPUT_ARGS:-}"
+        [ "${#extra[@]}" -gt 0 ] && cmd+=("${extra[@]}")
+
+        printf 'Running: %s\n' "${cmd[*]}"
+        "${cmd[@]}"

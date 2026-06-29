@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Local env / secrets
+.env
+.env.*
+*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test / coverage
+coverage/
+
+# npm pack artifacts
+*.tgz
+
+# Editor / OS noise
+.DS_Store
+
+# Internal dev docs (anything starting with DEV_) — never tracked
+DEV_*

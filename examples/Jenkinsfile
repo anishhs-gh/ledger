@@ -1,0 +1,22 @@
+// Example Jenkins pipeline — generate release notes in a Node container.
+// Store the provider key as a Jenkins "Secret text" credential (id: openai-api-key).
+pipeline {
+  agent {
+    docker { image 'node:20' }
+  }
+
+  environment {
+    OPENAI_API_KEY = credentials('openai-api-key')
+  }
+
+  stages {
+    stage('Release notes') {
+      steps {
+        // Ensure tags/history are present (configure full clone in the SCM step).
+        // @beta during the beta; drop the tag at stable v1.
+        sh 'npx --yes @anishhs/ledger@beta generate --provider openai -o RELEASE_NOTES.md'
+        archiveArtifacts artifacts: 'RELEASE_NOTES.md', fingerprint: true
+      }
+    }
+  }
+}

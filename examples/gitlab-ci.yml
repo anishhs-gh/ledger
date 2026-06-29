@@ -1,0 +1,13 @@
+# Example GitLab CI job — generate release notes on tag pipelines.
+# Add the contents to your .gitlab-ci.yml and set OPENAI_API_KEY as a CI/CD variable.
+release-notes:
+  image: node:20
+  rules:
+    - if: $CI_COMMIT_TAG # run on tag pipelines
+  variables:
+    GIT_DEPTH: "0" # full history + tags so the range can be derived
+  script:
+    - npx --yes @anishhs/ledger@beta generate --provider openai -o RELEASE_NOTES.md # @beta during beta; drop at stable v1
+  artifacts:
+    paths:
+      - RELEASE_NOTES.md

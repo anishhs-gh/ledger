@@ -1,0 +1,64 @@
+{
+  "name": "@anishhs/ledger",
+  "version": "1.0.0-beta.0",
+  "description": "AI-powered release notes generator — analyses git history and diffs to produce audience-tailored notes. Works locally and in any CI.",
+  "bin": {
+    "ledger": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "keywords": [
+    "release-notes",
+    "changelog",
+    "ai",
+    "git",
+    "cli"
+  ],
+  "author": "Anish Shekh <anishsh701@gmail.com> (https://anishhs.com)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anishhs-gh/ledger.git"
+  },
+  "bugs": {
+    "url": "https://github.com/anishhs-gh/ledger/issues"
+  },
+  "homepage": "https://github.com/anishhs-gh/ledger#readme",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.27.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.1068.0",
+    "@google/generative-ai": "^0.21.0",
+    "commander": "^12.0.0",
+    "js-yaml": "^4.1.0",
+    "openai": "^4.52.0",
+    "simple-git": "^3.22.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.9.0",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.0.0",
+    "eslint": "^9.9.0",
+    "tsup": "^8.2.0",
+    "typescript": "^5.5.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

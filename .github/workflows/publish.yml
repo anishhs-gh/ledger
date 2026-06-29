@@ -1,0 +1,138 @@
+name: Publish (manual)
+
+# Manual publish. Trigger from the Actions tab ("Run workflow"). Gated on the Test
+# and Audit workflows passing, then publishes to npm under the chosen dist-tag and
+# cuts a GitHub Release tagged v<package.json version>. During the beta, leave the
+# dist-tag at 'beta' so a plain `npm i @anishhs/ledger` does not pull beta code.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dist-tag:
+        description: "npm dist-tag to publish under (use 'beta' during the beta, 'latest' for stable)"
+        required: true
+        default: 'beta'
+
+# Prevent overlapping publishes.
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
+  audit:
+    uses: ./.github/workflows/audit.yml
+
+  publish:
+    needs: [test, audit]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the release + tag
+      id-token: write # npm provenance (publishConfig.provenance = true)
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history + tags: needed to derive the notes range and verify the tag
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (CJS + ESM)
+        run: npm run build
+
+      - name: Final test guard
+        run: npm test
+
+      - name: Read package version
+        id: pkg
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Verify tag does not already exist
+        run: |
+          if git rev-parse "v${{ steps.pkg.outputs.version }}" >/dev/null 2>&1; then
+            echo "::error::Tag v${{ steps.pkg.outputs.version }} already exists. Bump the version first."
+            exit 1
+          fi
+
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public --tag "${{ github.event.inputs.dist-tag }}"
+
+      # Dogfood: generate this release's notes with ledger ITSELF, run from the freshly
+      # built source (dist/cli.js) — NOT the published npm package. Range is previous tag
+      # → HEAD (the new tag isn't created until the next step); root commit on first release.
+      # The notes are written to the runner's temp dir ($RUNNER_TEMP), NOT the repo — it is
+      # a throwaway file passed to `gh release create`; nothing is committed or pushed.
+      # Uses AWS Bedrock; set the BEDROCK_API_KEY secret (and optionally AWS_REGION /
+      # LEDGER_MODEL repo variables). If the key is missing or generation fails, we fall
+      # back to GitHub's auto-generated notes so a publish is never blocked by note generation.
+      - name: Generate release notes from source
+        id: notes
+        env:
+          LEDGER_PROVIDER: bedrock
+          LEDGER_MODEL: ${{ vars.LEDGER_MODEL }} # optional; empty = provider default
+          BEDROCK_API_KEY: ${{ secrets.BEDROCK_API_KEY }}
+          AWS_REGION: ${{ vars.AWS_REGION }} # optional; ledger defaults to us-east-1
+        run: |
+          set -uo pipefail
+          notes_file="$RUNNER_TEMP/RELEASE_NOTES.md"
+          echo "notes-file=$notes_file" >> "$GITHUB_OUTPUT"
+
+          if [ -z "${BEDROCK_API_KEY:-}" ]; then
+            echo "::warning::BEDROCK_API_KEY not set — falling back to GitHub auto-generated notes."
+            echo "generated=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          prev="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+          if [ -n "$prev" ]; then
+            echo "Generating notes for ${prev}..HEAD"
+            from="$prev"
+          else
+            from="$(git rev-list --max-parents=0 HEAD | tail -1)"
+            echo "First release — generating notes for root (${from})..HEAD"
+          fi
+
+          if node dist/cli.js generate --from "$from" --to HEAD --output-file "$notes_file" --quiet && [ -s "$notes_file" ]; then
+            echo "generated=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::ledger note generation failed — falling back to GitHub auto-generated notes."
+            echo "generated=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Tag is derived from the package.json version (v<version>). Uses the ledger-generated
+      # notes when available, otherwise GitHub's auto notes. A prerelease version (containing a
+      # hyphen, e.g. -beta) is marked as a GitHub pre-release.
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          version="${{ steps.pkg.outputs.version }}"
+          prerelease=""
+          case "$version" in
+            *-*) prerelease="--prerelease" ;;
+          esac
+          if [ "${{ steps.notes.outputs.generated }}" = "true" ]; then
+            gh release create "v${version}" \
+              --title "v${version}" \
+              --notes-file "${{ steps.notes.outputs.notes-file }}" \
+              --target "${{ github.sha }}" \
+              $prerelease
+          else
+            gh release create "v${version}" \
+              --title "v${version}" \
+              --generate-notes \
+              --target "${{ github.sha }}" \
+              $prerelease
+          fi
