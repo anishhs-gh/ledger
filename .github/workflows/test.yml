@@ -1,18 +1,10 @@
 name: Test
 
-# Reusable + standalone test workflow. Runs on develop/master and PRs into them,
-# and is called by the dry-run and publish workflows so they share one source of
-# truth for "the code is green".
+# Reusable building block (workflow_call) — invoked by ci.yml on every push/PR and
+# by publish.yml before a release. Not triggered standalone on push/PR, so it never
+# runs twice for the same event.
 
 on:
-  push:
-    branches:
-      - develop
-      - master
-  pull_request:
-    branches:
-      - develop
-      - master
   workflow_call:
   workflow_dispatch:
 

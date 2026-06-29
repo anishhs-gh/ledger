@@ -1,0 +1,29 @@
+name: CI
+
+# Everyday gate. Runs on every branch push and on PRs into develop/master, and runs
+# test + audit + the publishability dry-run — so "would a publish succeed?" is
+# answered continuously, on feature branches, develop, and master. Never publishes.
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [develop, master]
+  workflow_dispatch:
+
+# One run per branch: a newer push/PR update cancels the in-progress run.
+concurrency:
+  group: ci-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
+  audit:
+    uses: ./.github/workflows/audit.yml
+
+  dry-run:
+    needs: [test, audit]
+    uses: ./.github/workflows/dryrun.yml
+    secrets: inherit
