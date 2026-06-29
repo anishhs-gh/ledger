@@ -6,6 +6,10 @@ name: Dry-run publish
 # manual Publish will go through before the change is merged.
 
 on:
+  push:
+    branches:
+      - develop
+      - master
   pull_request:
     branches:
       - develop

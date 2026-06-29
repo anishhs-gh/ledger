@@ -11,7 +11,7 @@ auto-detects the CI environment and derives the commit range when you don't pass
 | File | Platform | Notes |
 | --- | --- | --- |
 | [`../action.yml`](../action.yml) | GitHub Actions | Composite action — `uses: anishhs-gh/ledger@v1.0.0-beta.0` |
-| [`../.github/workflows/release-notes.example.yml`](../.github/workflows/release-notes.example.yml) | GitHub Actions | Full example workflow using the action |
+| [`github-actions.yml`](./github-actions.yml) | GitHub Actions | Full example workflow using the action |
 | [`gitlab-ci.yml`](./gitlab-ci.yml) | GitLab CI | Tag-pipeline job |
 | [`Jenkinsfile`](./Jenkinsfile) | Jenkins | Declarative pipeline in a Node container |
 | [`ci-generic.sh`](./ci-generic.sh) | Any runner / local | Portable shell script |
