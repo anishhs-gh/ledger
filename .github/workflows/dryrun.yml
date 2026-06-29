@@ -1,30 +1,16 @@
 name: Dry-run publish
 
-# Pre-merge gate for PRs into develop / master. Confirms the package passes tests
-# + audit, that NPM_TOKEN authenticates and has publish permission, and that
-# `npm publish` would succeed — all WITHOUT publishing. Validates that the eventual
-# manual Publish will go through before the change is merged.
+# Reusable building block (workflow_call) — the publishability check. Builds the
+# package, verifies NPM_TOKEN authenticates and has publish permission, and runs
+# `npm publish --dry-run` + `npm pack` WITHOUT publishing. Invoked by ci.yml on
+# every push/PR (so we know a publish would succeed long before we run it) and by
+# publish.yml as the final guard before a real publish.
 
 on:
-  push:
-    branches:
-      - develop
-      - master
-  pull_request:
-    branches:
-      - develop
-      - master
-  workflow_dispatch:
+  workflow_call:
 
 jobs:
-  test:
-    uses: ./.github/workflows/test.yml
-
-  audit:
-    uses: ./.github/workflows/audit.yml
-
   dry-run:
-    needs: [test, audit]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
