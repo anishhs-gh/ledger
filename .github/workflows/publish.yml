@@ -95,7 +95,7 @@ jobs:
           LEDGER_PROVIDER: bedrock
           LEDGER_MODEL: ${{ vars.LEDGER_MODEL }} # optional; empty = provider default
           BEDROCK_API_KEY: ${{ secrets.BEDROCK_API_KEY }}
-          AWS_REGION: ${{ vars.AWS_REGION }} # optional; ledger defaults to us-east-1
+          AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }} # set the AWS_REGION variable to your Bedrock region
         run: |
           set -uo pipefail
           notes_file="$RUNNER_TEMP/RELEASE_NOTES.md"

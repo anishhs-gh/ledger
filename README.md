@@ -4,10 +4,10 @@
 
 <h1 align="center">ledger</h1>
 
-[![npm beta](https://img.shields.io/npm/v/@anishhs/ledger/beta.svg)](https://www.npmjs.com/package/@anishhs/ledger)
+[![npm beta](https://img.shields.io/npm/v/@anishhs/ledger/beta)](https://www.npmjs.com/package/@anishhs/ledger)
 [![CI](https://github.com/anishhs-gh/ledger/actions/workflows/ci.yml/badge.svg)](https://github.com/anishhs-gh/ledger/actions/workflows/ci.yml)
-[![license: MIT](https://img.shields.io/npm/l/@anishhs/ledger.svg)](./LICENSE)
-[![node](https://img.shields.io/node/v/@anishhs/ledger.svg)](https://nodejs.org)
+[![license: MIT](https://img.shields.io/github/license/anishhs-gh/ledger)](./LICENSE)
+[![node](https://img.shields.io/node/v/@anishhs/ledger/beta)](https://nodejs.org)
 
 **AI-powered release notes, generated from your git history — locally or in any CI.**
 

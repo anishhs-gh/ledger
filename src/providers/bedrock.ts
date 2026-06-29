@@ -2,7 +2,9 @@ import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-r
 import type { AIProvider, ProviderOptions } from './types'
 
 export function createBedrockProvider(opts: ProviderOptions): AIProvider {
-  const region = process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION ?? 'us-east-1'
+  // Use `||` (not `??`) so an empty-string env var (e.g. AWS_REGION="" from an unset
+  // CI variable) falls back instead of producing a malformed endpoint.
+  const region = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1'
   const apiKey = process.env.BEDROCK_API_KEY
 
   // Bedrock API keys (ABSK-prefixed) use x-api-key header auth — not IAM credential chain
