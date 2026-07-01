@@ -8,6 +8,9 @@ export interface ResilienceOptions {
 
 const BASE_DELAY_MS = 500
 const MAX_DELAY_MS = 8000
+// Cap on how long we'll honour a provider's Retry-After hint, so a hostile or absurd
+// value can't stall the CLI indefinitely. Free-tier rate limits ask for ~10-30s.
+const MAX_RETRY_AFTER_MS = 30_000
 
 class TimeoutError extends Error {
   constructor(ms: number) {
@@ -33,7 +36,9 @@ export function withResilience(provider: AIProvider, opts: ResilienceOptions): A
         } catch (err) {
           lastErr = err
           if (!isRetryable(err) || attempt === opts.maxRetries) break
-          await sleep(backoffDelay(attempt))
+          // Prefer the provider's own Retry-After hint (common on 429s, e.g. OpenRouter
+          // free tier) over blind exponential backoff so we wait just long enough.
+          await sleep(retryAfterMs(err) ?? backoffDelay(attempt))
         }
       }
 
@@ -77,6 +82,42 @@ function httpStatus(err: unknown): number | undefined {
   const status = (err as { status?: number; statusCode?: number })?.status ??
     (err as { statusCode?: number })?.statusCode
   return typeof status === 'number' ? status : undefined
+}
+
+// Extract a Retry-After delay (ms) from an error's response headers, if present.
+// Supports both the numeric "seconds" form and the HTTP-date form. Returns undefined
+// when there's no usable hint, so the caller falls back to exponential backoff.
+function retryAfterMs(err: unknown): number | undefined {
+  const raw = headerValue((err as { headers?: unknown })?.headers, 'retry-after')
+  if (!raw) return undefined
+
+  const seconds = Number(raw)
+  if (Number.isFinite(seconds)) {
+    return clampDelay(seconds * 1000)
+  }
+
+  const at = Date.parse(raw)
+  if (!Number.isNaN(at)) {
+    return clampDelay(at - Date.now())
+  }
+  return undefined
+}
+
+function clampDelay(ms: number): number {
+  return Math.min(Math.max(ms, 0), MAX_RETRY_AFTER_MS)
+}
+
+// Read a header case-insensitively from either a Headers instance or a plain object —
+// SDKs differ (the OpenAI SDK exposes a plain object, fetch a Headers instance).
+function headerValue(headers: unknown, name: string): string | undefined {
+  if (!headers || typeof headers !== 'object') return undefined
+  const get = (headers as Headers).get
+  if (typeof get === 'function') {
+    return get.call(headers, name) ?? undefined
+  }
+  const obj = headers as Record<string, string>
+  const key = Object.keys(obj).find(k => k.toLowerCase() === name)
+  return key !== undefined ? obj[key] : undefined
 }
 
 function backoffDelay(attempt: number): number {

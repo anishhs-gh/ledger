@@ -12,7 +12,10 @@ export function createOpenAIProvider(opts: ProviderOptions): AIProvider {
       const res = await client.chat.completions.create({
         model: opts.model,
         messages: [{ role: 'user', content: prompt }],
-        max_tokens: opts.maxTokens,
+        // `max_completion_tokens` (not the deprecated `max_tokens`) — reasoning models
+        // (o-series, gpt-5) reject `max_tokens` with a 400, and it's the canonical param
+        // for every current chat model on the OpenAI API.
+        max_completion_tokens: opts.maxTokens,
       })
       return res.choices[0]?.message?.content ?? ''
     },

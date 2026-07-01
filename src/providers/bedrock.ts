@@ -2,7 +2,9 @@ import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-r
 import type { AIProvider, ProviderOptions } from './types'
 
 export function createBedrockProvider(opts: ProviderOptions): AIProvider {
-  const region = process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION ?? 'us-east-1'
+  // `||` (not `??`) so an empty AWS_REGION — which is what a workflow `env:` block sets
+  // when the underlying secret/variable is missing — still falls back to a real region.
+  const region = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1'
   const apiKey = process.env.BEDROCK_API_KEY
 
   // Bedrock API keys (ABSK-prefixed) use x-api-key header auth — not IAM credential chain
@@ -31,6 +33,9 @@ function createWithApiKey(opts: ProviderOptions, region: string, apiKey: string)
           'Authorization': `Bearer ${apiKey}`,
         },
         body,
+        // Abort the underlying request on timeout instead of leaking the socket while the
+        // resilience layer's race-based timeout gives up.
+        signal: AbortSignal.timeout(opts.timeout),
       })
 
       if (!res.ok) {
@@ -43,7 +48,7 @@ function createWithApiKey(opts: ProviderOptions, region: string, apiKey: string)
       const data = await res.json() as {
         output?: { message?: { content?: Array<{ text?: string }> } }
       }
-      return data.output?.message?.content?.[0]?.text ?? ''
+      return extractText(data.output?.message?.content)
     },
   }
 }
@@ -60,8 +65,15 @@ function createWithIAM(opts: ProviderOptions, region: string): AIProvider {
       })
 
       const res = await client.send(command)
-      const block = res.output?.message?.content?.[0]
-      return block && 'text' in block ? block.text ?? '' : ''
+      return extractText(res.output?.message?.content)
     },
   }
+}
+
+// Bedrock's Converse API returns an array of content blocks. Reasoning models
+// (e.g. openai.gpt-oss, deepseek) emit a `reasoningContent` block BEFORE the answer,
+// so the answer is not always at index 0 — pick the first block that actually has text.
+function extractText(content: Array<{ text?: string }> | undefined): string {
+  if (!content) return ''
+  return content.find(block => typeof block?.text === 'string')?.text ?? ''
 }
