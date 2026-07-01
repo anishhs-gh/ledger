@@ -1,15 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-const { ctorArgs, getModelMock, generateContentMock } = vi.hoisted(() => {
-  const generateContentMock = vi.fn()
-  const getModelMock = vi.fn(() => ({ generateContent: generateContentMock }))
-  return { ctorArgs: [] as string[], getModelMock, generateContentMock }
-})
+const { ctorArgs, generateContentMock } = vi.hoisted(() => ({
+  ctorArgs: [] as Array<Record<string, unknown>>,
+  generateContentMock: vi.fn(),
+}))
 
-vi.mock('@google/generative-ai', () => ({
-  GoogleGenerativeAI: class {
-    getGenerativeModel = getModelMock
-    constructor(apiKey: string) { ctorArgs.push(apiKey) }
+vi.mock('@google/genai', () => ({
+  GoogleGenAI: class {
+    models = { generateContent: generateContentMock }
+    constructor(args: Record<string, unknown>) { ctorArgs.push(args) }
   },
 }))
 
@@ -20,9 +19,8 @@ const savedEnv = { ...process.env }
 
 beforeEach(() => {
   ctorArgs.length = 0
-  getModelMock.mockClear()
   generateContentMock.mockReset()
-  generateContentMock.mockResolvedValue({ response: { text: () => 'the answer' } })
+  generateContentMock.mockResolvedValue({ text: 'the answer' })
   process.env.GEMINI_API_KEY = 'gem-test'
 })
 afterEach(() => { process.env = { ...savedEnv } })
@@ -35,19 +33,24 @@ describe('gemini provider', () => {
 
   it('passes the api key to the SDK', () => {
     createGeminiProvider(OPTS)
-    expect(ctorArgs[0]).toBe('gem-test')
+    expect(ctorArgs[0]).toMatchObject({ apiKey: 'gem-test' })
   })
 
-  it('configures the model with maxOutputTokens', async () => {
+  it('sends model, prompt and maxOutputTokens', async () => {
     await createGeminiProvider(OPTS).complete('prompt')
-    expect(getModelMock).toHaveBeenCalledWith({
+    expect(generateContentMock).toHaveBeenCalledWith({
       model: 'gemini-2.5-flash',
-      generationConfig: { maxOutputTokens: 256 },
+      contents: 'prompt',
+      config: { maxOutputTokens: 256 },
     })
-    expect(generateContentMock).toHaveBeenCalledWith('prompt')
   })
 
   it('returns the response text', async () => {
     expect(await createGeminiProvider(OPTS).complete('x')).toBe('the answer')
+  })
+
+  it('returns empty string when text is absent', async () => {
+    generateContentMock.mockResolvedValue({})
+    expect(await createGeminiProvider(OPTS).complete('x')).toBe('')
   })
 })

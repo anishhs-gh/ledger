@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import yaml from 'js-yaml'
+import * as yaml from 'js-yaml'
 import { CliError, EXIT } from '../errors'
 import type { LedgerConfig, ProviderName } from '../types'
 
@@ -20,11 +20,11 @@ const VALID_PROVIDERS: ProviderName[] = [
 // user must name one.
 const DEFAULT_MODELS: Record<ProviderName, string> = {
   openai: 'gpt-4o',
-  anthropic: 'claude-sonnet-4-6',
+  anthropic: 'claude-sonnet-5',
   gemini: 'gemini-2.5-pro',
   openrouter: 'openai/gpt-4o',
   ollama: 'llama3.1',
-  bedrock: 'anthropic.claude-sonnet-4-6-v1:0',
+  bedrock: 'anthropic.claude-sonnet-5',
   'openai-compatible': '',
 }
 

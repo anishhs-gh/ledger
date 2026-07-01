@@ -1,20 +1,22 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { GoogleGenAI } from '@google/genai'
 import type { AIProvider, ProviderOptions } from './types'
 
+// Uses @google/genai — the unified Google GenAI SDK that replaces the now-deprecated
+// @google/generative-ai package.
 export function createGeminiProvider(opts: ProviderOptions): AIProvider {
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) throw new Error('GEMINI_API_KEY environment variable is required')
 
-  const genAI = new GoogleGenerativeAI(apiKey)
+  const ai = new GoogleGenAI({ apiKey })
 
   return {
     async complete(prompt: string): Promise<string> {
-      const geminiModel = genAI.getGenerativeModel({
+      const response = await ai.models.generateContent({
         model: opts.model,
-        generationConfig: { maxOutputTokens: opts.maxTokens },
+        contents: prompt,
+        config: { maxOutputTokens: opts.maxTokens },
       })
-      const result = await geminiModel.generateContent(prompt)
-      return result.response.text()
+      return response.text ?? ''
     },
   }
 }

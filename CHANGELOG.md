@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0-beta.1] - 2026-07-01
+
 ### Added
 
 - **`--stdout`** flag to also echo notes to stdout when writing to `--output-file`.
@@ -31,6 +33,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`--output-file`** no longer echoes notes to stdout by default; the file is the output. Use
   `--stdout` to restore the old dual-write behaviour. (`--quiet` still silences progress on stderr.)
+- **Default models refreshed** to current, docs-verified IDs: the `anthropic` provider now
+  defaults to `claude-sonnet-5` (was the now-legacy `claude-sonnet-4-6`), and `bedrock` to
+  `anthropic.claude-sonnet-5` (was `anthropic.claude-sonnet-4-6-v1:0`, whose `-v1:0` suffix is
+  not the current Bedrock ID form).
+
+### Dependencies
+
+- **Migrated the Gemini provider off the deprecated `@google/generative-ai` SDK** to the
+  unified `@google/genai` (v2). No user-facing behaviour change.
+- **Upgraded all dependencies to their latest supported versions**, verified against a full
+  typecheck, the test suite, and live provider runs: `openai` 4 → 6, `@anthropic-ai/sdk`
+  0.27 → 0.109, `@aws-sdk/client-bedrock-runtime` → latest, `commander` 12 → 14, `js-yaml`
+  4 → 5, plus dev tooling (`typescript` 5 → 6, `eslint` 9 → 10, `vitest` 2 → 4, `tsup`,
+  `typescript-eslint`). The `@anthropic-ai/sdk` bump also drops the deprecated transitive
+  `node-domexception` from that path.
+- Adjusted the config loader to js-yaml 5's named exports (`import * as yaml`), switched the
+  tsconfig to `Bundler` module resolution (TS 6), and dropped the now-redundant
+  `@types/js-yaml` (js-yaml 5 ships its own types).
+- Security advisories reduced from 5 (incl. critical/high) to 1 low-severity, dev-only esbuild
+  dev-server issue that is never shipped.
+
+### Changed (breaking)
+
+- **Minimum Node version is now 20** (was 18, which is EOL). This aligns `engines` with what
+  `@google/genai` and the AWS SDK already require, and the build target moves to `node20`.
 
 ## [1.0.0-beta.0] - 2026-06-29
 
