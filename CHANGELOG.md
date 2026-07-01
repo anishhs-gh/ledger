@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`--stdout`** flag to also echo notes to stdout when writing to `--output-file`.
+- Retry logic now honours a provider's **`Retry-After`** header on rate limits (capped at 30s),
+  falling back to exponential backoff when absent — makes rate-limited free tiers usable.
+
+### Fixed
+
+- **Bedrock**: extract the first text block from the Converse response instead of assuming it's
+  first, so **reasoning models** (e.g. `openai.gpt-oss-*`, DeepSeek) no longer return empty notes.
+- **Bedrock**: `AWS_REGION` now falls back to `us-east-1` when set but **empty** (as a CI `env:`
+  block does), instead of building an invalid endpoint and failing with `fetch failed`.
+- **Bedrock**: the API-key request now aborts on timeout rather than leaking the socket.
+- **OpenAI**: send `max_completion_tokens` instead of the deprecated `max_tokens`, so **reasoning
+  models** (o-series, gpt-5) no longer 400.
+- **Anthropic**: return the first `text` content block rather than index 0, guarding against a
+  leading tool-use/thinking block.
+- **`--last N`**: clamp to available history — asking for more commits than exist now includes
+  everything back to the first commit instead of failing with a git "unknown revision" error.
+
+### Changed
+
+- **`--output-file`** no longer echoes notes to stdout by default; the file is the output. Use
+  `--stdout` to restore the old dual-write behaviour. (`--quiet` still silences progress on stderr.)
+
 ## [1.0.0-beta.0] - 2026-06-29
 
 First public **beta**. Functionally complete; published under the npm `beta` dist-tag for testing

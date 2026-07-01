@@ -14,8 +14,12 @@ export function createAnthropicProvider(opts: ProviderOptions): AIProvider {
         max_tokens: opts.maxTokens,
         messages: [{ role: 'user', content: prompt }],
       })
-      const block = res.content[0]
-      return block.type === 'text' ? block.text : ''
+      // Return the first text block rather than assuming it's at index 0 — a non-text
+      // block (tool use, or a thinking block if thinking is ever enabled) can come first.
+      for (const block of res.content) {
+        if (block.type === 'text') return block.text
+      }
+      return ''
     },
   }
 }

@@ -26,6 +26,7 @@ export const generateCommand = new Command('generate')
   .option('-o, --output-file <path>', 'Write notes to a file instead of (only) stdout')
   .option('--append', 'Append the notes to the end of --output-file (newest at the bottom)')
   .option('--prepend', 'Prepend the notes to --output-file (newest on top, below any # title)')
+  .option('--stdout', 'Also echo the notes to stdout when writing to --output-file')
   .option('--config <path>', 'Path to config file')
   .option('--provider <name>', 'AI provider override')
   .option('--model <name>', 'AI model override')
@@ -147,7 +148,8 @@ export const generateCommand = new Command('generate')
         writeNotesFile(dest, rendered, writeMode)
         const verb = writeMode === 'append' ? 'Appended to' : writeMode === 'prepend' ? 'Prepended to' : 'Wrote'
         log(`${verb} ${dest}\n`)
-        if (!opts.quiet) process.stdout.write(rendered)
+        // The file is the output; only echo to stdout when explicitly asked (--stdout).
+        if (opts.stdout) process.stdout.write(rendered)
       } else {
         process.stdout.write(rendered)
       }

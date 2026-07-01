@@ -3,6 +3,11 @@ import { CliError, EXIT } from '../errors'
 import type { CiContext } from '../ci/detect'
 import type { Commit } from '../types'
 
+// Git's well-known empty-tree object. Used as the `from` side of a range to include the
+// very first (root) commit — `<empty-tree>..HEAD` is accepted by both `git diff` and
+// `git log`, whereas `HEAD~N` throws once N reaches past the root.
+export const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
+
 export async function createGit(cwd: string = process.cwd()): Promise<SimpleGit> {
   const git = simpleGit(cwd)
   const isRepo = await git.checkIsRepo()
@@ -25,7 +30,13 @@ export async function resolveRange(
   }
 
   if (opts.last !== undefined) {
-    return { from: `HEAD~${opts.last}`, to }
+    // `<to>~N` doesn't exist once N reaches past the root commit (e.g. `--last 5` in a repo
+    // with 2 commits), which makes git fail with a cryptic "unknown revision". When the
+    // requested count meets or exceeds the available history, anchor to the empty tree so
+    // the range still resolves and includes the root commit.
+    const total = await countCommits(git, to)
+    const from = opts.last >= total ? EMPTY_TREE : `${to}~${opts.last}`
+    return { from, to }
   }
 
   if (opts.from) {
@@ -90,6 +101,18 @@ async function getRootCommit(git: SimpleGit): Promise<string | null> {
   }
 }
 
+// Number of commits reachable from `ref`. Returns Infinity when it can't be determined
+// (e.g. unknown ref) so callers don't wrongly clamp — they fall back to the literal range.
+async function countCommits(git: SimpleGit, ref: string): Promise<number> {
+  try {
+    const out = await git.raw(['rev-list', '--count', ref])
+    const n = parseInt(out.trim(), 10)
+    return Number.isFinite(n) ? n : Infinity
+  } catch {
+    return Infinity
+  }
+}
+
 async function getLastTag(git: SimpleGit): Promise<string> {
   try {
     const result = await git.raw(['describe', '--tags', '--abbrev=0'])
@@ -107,7 +130,9 @@ export async function collectCommits(
   from: string,
   to: string
 ): Promise<Commit[]> {
-  const log = await git.log({ from, to })
+  // symmetric:false → `from..to` (commits in `to` not in `from`), matching how the diff is
+  // taken. The default `...` is a symmetric difference and also rejects the empty-tree `from`.
+  const log = await git.log({ from, to, symmetric: false })
   return log.all.map(entry => ({
     sha: entry.hash,
     shortSha: entry.hash.slice(0, 7),
