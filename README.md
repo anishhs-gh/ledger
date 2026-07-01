@@ -34,8 +34,8 @@ notes describe *what actually changed* — not just what someone typed in a comm
 - **Provider-agnostic (BYOK):** OpenAI, Anthropic, Gemini, OpenRouter, Ollama, Bedrock.
 - **CI-first, local-friendly:** the same command works on your laptop and inside GitHub
   Actions, GitLab CI, Jenkins, or any runner — auto-detecting the environment and range.
-- **Robust:** per-request timeouts, automatic retry with backoff, and a documented
-  exit-code contract so pipelines behave predictably.
+- **Robust:** per-request timeouts, automatic retry with backoff (honouring a provider's
+  `Retry-After` hint), and a documented exit-code contract so pipelines behave predictably.
 - **Cheap to preview:** `--dry-run` assembles the context and estimates tokens without
   spending anything.
 
@@ -82,7 +82,7 @@ ledger generate [options]
 | `--since-last-tag` | From the last git tag to `HEAD` (default when no range is given) |
 | `--from <ref>` | Start from a tag, branch, or SHA |
 | `--to <ref>` | End ref (default: `HEAD`) |
-| `--last <n>` | Include the last N commits |
+| `--last <n>` | Include the last N commits (clamped to available history — asking for more than exist just includes everything back to the first commit) |
 
 In CI, if you pass **no** range flag, `ledger` derives one automatically:
 a tag build uses *previous tag → this tag*; a PR/MR build uses *base branch → HEAD*.
@@ -93,7 +93,8 @@ a tag build uses *previous tag → this tag*; a PR/MR build uses *base branch �
 | --- | --- |
 | `--audience <mode>` | `engineering` (default), `business`, or `qa` |
 | `--output <format>` | `markdown` (default) or `json` |
-| `-o, --output-file <path>` | Write notes to a file (still echoes to stdout unless `--quiet`). Optional — omit it and notes go to **stdout** |
+| `-o, --output-file <path>` | Write notes to a file. Optional — omit it and notes go to **stdout**. When set, notes are **not** echoed to stdout (add `--stdout` if you want both) |
+| `--stdout` | Also echo the notes to stdout when writing to `--output-file` |
 | `--append` | Append to `--output-file` instead of overwriting (newest at the bottom) |
 | `--prepend` | Prepend to `--output-file` (newest on top, inserted below a leading `#` title) — ideal for a `CHANGELOG.md` |
 | `--max-tokens <n>` | Max tokens for the AI response |
@@ -105,8 +106,9 @@ a tag build uses *previous tag → this tag*; a PR/MR build uses *base branch �
 | `--provider <name>` / `--model <name>` | Override the configured provider/model |
 | `--config <path>` | Path to a config file |
 
-Notes are written to **stdout**; all progress/logging goes to **stderr**, so
-`ledger generate > NOTES.md` is always clean.
+Without `--output-file`, notes are written to **stdout** and all progress/logging goes to
+**stderr**, so `ledger generate > NOTES.md` is always clean. With `--output-file`, the file is
+the output and stdout stays quiet unless you add `--stdout`.
 
 ## Configuration
 
@@ -146,7 +148,7 @@ markdown output.)
 | Gemini | `GEMINI_API_KEY` | |
 | OpenRouter | `OPENROUTER_API_KEY` | |
 | Ollama | — | local; set `OLLAMA_BASE_URL` to override `http://localhost:11434/v1` |
-| Bedrock | `BEDROCK_API_KEY` *or* AWS IAM (`AWS_REGION`, `AWS_ACCESS_KEY_ID`, …) | |
+| Bedrock | `BEDROCK_API_KEY` *or* AWS IAM (`AWS_REGION`, `AWS_ACCESS_KEY_ID`, …) | `AWS_REGION` defaults to `us-east-1`. Reasoning models (e.g. `openai.gpt-oss-*`) are supported. |
 | **OpenAI-compatible** | `LEDGER_API_KEY` (or your own via `apiKeyEnv`) | **Any other service** — set `baseURL`. See below. |
 
 ### Use any OpenAI-compatible provider

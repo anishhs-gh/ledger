@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0-beta.1] - 2026-07-01
+
+### Added
+
+- **`--stdout`** flag to also echo notes to stdout when writing to `--output-file`.
+- Retry logic now honours a provider's **`Retry-After`** header on rate limits (capped at 30s),
+  falling back to exponential backoff when absent — makes rate-limited free tiers usable.
+
+### Fixed
+
+- **Bedrock**: extract the first text block from the Converse response instead of assuming it's
+  first, so **reasoning models** (e.g. `openai.gpt-oss-*`, DeepSeek) no longer return empty notes.
+- **Bedrock**: `AWS_REGION` now falls back to `us-east-1` when set but **empty** (as a CI `env:`
+  block does), instead of building an invalid endpoint and failing with `fetch failed`.
+- **Bedrock**: the API-key request now aborts on timeout rather than leaking the socket.
+- **OpenAI**: send `max_completion_tokens` instead of the deprecated `max_tokens`, so **reasoning
+  models** (o-series, gpt-5) no longer 400.
+- **Anthropic**: return the first `text` content block rather than index 0, guarding against a
+  leading tool-use/thinking block.
+- **`--last N`**: clamp to available history — asking for more commits than exist now includes
+  everything back to the first commit instead of failing with a git "unknown revision" error.
+
+### Changed
+
+- **`--output-file`** no longer echoes notes to stdout by default; the file is the output. Use
+  `--stdout` to restore the old dual-write behaviour. (`--quiet` still silences progress on stderr.)
+- **Default models refreshed** to current, docs-verified IDs: the `anthropic` provider now
+  defaults to `claude-sonnet-5` (was the now-legacy `claude-sonnet-4-6`), and `bedrock` to
+  `anthropic.claude-sonnet-5` (was `anthropic.claude-sonnet-4-6-v1:0`, whose `-v1:0` suffix is
+  not the current Bedrock ID form).
+
+### Dependencies
+
+- **Migrated the Gemini provider off the deprecated `@google/generative-ai` SDK** to the
+  unified `@google/genai` (v2). No user-facing behaviour change.
+- **Upgraded all dependencies to their latest supported versions**, verified against a full
+  typecheck, the test suite, and live provider runs: `openai` 4 → 6, `@anthropic-ai/sdk`
+  0.27 → 0.109, `@aws-sdk/client-bedrock-runtime` → latest, `commander` 12 → 14, `js-yaml`
+  4 → 5, plus dev tooling (`typescript` 5 → 6, `eslint` 9 → 10, `vitest` 2 → 4, `tsup`,
+  `typescript-eslint`). The `@anthropic-ai/sdk` bump also drops the deprecated transitive
+  `node-domexception` from that path.
+- Adjusted the config loader to js-yaml 5's named exports (`import * as yaml`), switched the
+  tsconfig to `Bundler` module resolution (TS 6), and dropped the now-redundant
+  `@types/js-yaml` (js-yaml 5 ships its own types).
+- Security advisories reduced from 5 (incl. critical/high) to 1 low-severity, dev-only esbuild
+  dev-server issue that is never shipped.
+
+### Changed (breaking)
+
+- **Minimum Node version is now 20** (was 18, which is EOL). This aligns `engines` with what
+  `@google/genai` and the AWS SDK already require, and the build target moves to `node20`.
+
 ## [1.0.0-beta.0] - 2026-06-29
 
 First public **beta**. Functionally complete; published under the npm `beta` dist-tag for testing
