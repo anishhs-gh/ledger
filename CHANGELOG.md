@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-07-07
+
+First stable release.
+
+### Changed
+
+- **Zero-SDK providers — install size cut ~94% (58 MB → ~3.5 MB).** Every provider now talks to
+  its HTTP API directly with `fetch` instead of a vendor SDK. The `openai`, `@anthropic-ai/sdk`,
+  `@google/genai`, **and `@aws-sdk/client-bedrock-runtime`** dependencies are all removed, and the
+  OpenAI-compatible providers (`openai`, `openrouter`, `ollama`, `openai-compatible`) share one
+  implementation. Cold `npx` runs are far faster and lighter, with **no change** to configuration,
+  environment variables, supported providers, or output.
+- **Bedrock IAM auth now signs its own requests (SigV4 via Node's built-in `crypto`)** instead of
+  the AWS SDK, so it keeps working everywhere — including CI with temporary credentials from OIDC
+  / assume-role (`AWS_SESSION_TOKEN`) — with nothing extra to install. The `BEDROCK_API_KEY` path
+  is unchanged.
+
+### Added
+
+- **Update notifier.** `generate` checks npm for a newer release and prints `current → latest` when
+  you're behind. Built to never cost time: it runs concurrently with the AI request, is cached for a
+  day, caps the network wait, and stays silent in CI, non-interactive shells, under `--quiet`, or with
+  `NO_UPDATE_NOTIFIER` set — any network failure is ignored. No new dependencies.
+- **Clearer "request too large" errors.** When a prompt (plus the reserved `max_tokens` output)
+  exceeds a provider's per-request or per-minute token limit (HTTP 413, common on free tiers), the
+  error now explains how to fix it — narrow the range, lower `--max-tokens`, reduce `maxDiffLines`,
+  or use a higher-tier key — while still surfacing the provider's own message. It is treated as
+  non-retryable.
+- **`--dry-run` now reports the total tokens requested** (prompt **plus** the reserved output
+  budget), not just the prompt, so you can catch an over-limit request before spending anything.
+- **Version flag is now `-v`** — `ledger -v` prints the version (rebound from Commander's
+  default `-V`); `--version` still works.
+
 ## [1.0.0-beta.1] - 2026-07-01
 
 ### Added
@@ -103,5 +136,7 @@ commits **and** the actual code diffs — and runs identically on a laptop or in
   (Node 18/20/22 → typecheck → lint → test → build), and a publish-on-tag release workflow
   with npm provenance.
 
-[Unreleased]: https://github.com/anishhs-gh/ledger/compare/v1.0.0-beta.0...HEAD
+[Unreleased]: https://github.com/anishhs-gh/ledger/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/anishhs-gh/ledger/compare/v1.0.0-beta.1...v1.0.0
+[1.0.0-beta.1]: https://github.com/anishhs-gh/ledger/compare/v1.0.0-beta.0...v1.0.0-beta.1
 [1.0.0-beta.0]: https://github.com/anishhs-gh/ledger/releases/tag/v1.0.0-beta.0

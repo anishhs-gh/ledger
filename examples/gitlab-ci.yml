@@ -1,5 +1,6 @@
 # Example GitLab CI job — generate release notes on tag pipelines.
 # Add the contents to your .gitlab-ci.yml and set OPENAI_API_KEY as a CI/CD variable.
+# Provider and model come from the ledger.config.yaml committed to your repo (run `ledger init`).
 release-notes:
   image: node:20
   rules:
@@ -7,7 +8,7 @@ release-notes:
   variables:
     GIT_DEPTH: "0" # full history + tags so the range can be derived
   script:
-    - npx --yes @anishhs/ledger@beta generate --provider openai -o RELEASE_NOTES.md # @beta during beta; drop at stable v1
+    - npx --yes @anishhs/ledger generate -o RELEASE_NOTES.md
   artifacts:
     paths:
       - RELEASE_NOTES.md

@@ -53,6 +53,25 @@ describe('withResilience', () => {
     expect(provider.complete).toHaveBeenCalledTimes(3) // initial + 2 retries
   })
 
+  it('maps a 413 request-too-large to a RUNTIME error with actionable guidance, without retrying', async () => {
+    const err = httpError(413)
+    err.message = 'HTTP 413: {"error":{"message":"Request too large — Limit 12000, Requested 22370"}}'
+    const provider = { complete: vi.fn(async () => { throw err }) }
+
+    let caught: (Error & { code?: number }) | undefined
+    try {
+      await withResilience(provider, { timeout: 1000, maxRetries: 3 }).complete('x')
+    } catch (e) {
+      caught = e as Error & { code?: number }
+    }
+
+    expect(caught?.code).toBe(EXIT.RUNTIME)
+    expect(caught?.message).toMatch(/too large/i)
+    expect(caught?.message).toContain('Requested 22370') // provider's own detail is preserved
+    expect(caught?.message).toContain('--dry-run')       // and the actionable hint
+    expect(provider.complete).toHaveBeenCalledTimes(1)   // not retried
+  })
+
   it('honours a numeric Retry-After header before the next attempt', async () => {
     vi.useFakeTimers()
     let calls = 0

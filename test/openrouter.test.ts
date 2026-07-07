@@ -1,29 +1,22 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-
-const { createMock, ctorArgs } = vi.hoisted(() => ({
-  createMock: vi.fn(),
-  ctorArgs: [] as Array<Record<string, unknown>>,
-}))
-
-vi.mock('openai', () => ({
-  default: class {
-    chat = { completions: { create: createMock } }
-    constructor(args: Record<string, unknown>) { ctorArgs.push(args) }
-  },
-}))
-
 import { createOpenRouterProvider } from '../src/providers/openrouter'
 
 const OPTS = { model: 'openai/gpt-4o', maxTokens: 256, timeout: 60_000, maxRetries: 0 }
 const savedEnv = { ...process.env }
 
-beforeEach(() => {
-  createMock.mockReset()
-  createMock.mockResolvedValue({ choices: [{ message: { content: 'ok' } }] })
-  ctorArgs.length = 0
-  process.env.OPENROUTER_API_KEY = 'sk-or-test'
-})
-afterEach(() => { process.env = { ...savedEnv } })
+function mockFetch() {
+  const fn = vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    headers: new Headers(),
+    json: async () => ({ choices: [{ message: { content: 'ok' } }] }),
+  }))
+  vi.stubGlobal('fetch', fn)
+  return fn
+}
+
+beforeEach(() => { process.env.OPENROUTER_API_KEY = 'sk-or-test' })
+afterEach(() => { vi.unstubAllGlobals(); process.env = { ...savedEnv } })
 
 describe('openrouter provider', () => {
   it('throws when OPENROUTER_API_KEY is missing', () => {
@@ -31,17 +24,19 @@ describe('openrouter provider', () => {
     expect(() => createOpenRouterProvider(OPTS)).toThrow(/OPENROUTER_API_KEY/)
   })
 
-  it('targets the OpenRouter base URL with the key and attribution headers', () => {
-    createOpenRouterProvider(OPTS)
-    expect(ctorArgs[0]).toMatchObject({
-      apiKey: 'sk-or-test',
-      baseURL: 'https://openrouter.ai/api/v1',
-    })
-    expect((ctorArgs[0].defaultHeaders as Record<string, string>)['X-Title']).toBe('Ledger')
+  it('targets the OpenRouter endpoint with the key and attribution headers', async () => {
+    const fn = mockFetch()
+    await createOpenRouterProvider(OPTS).complete('x')
+    expect(fn.mock.calls[0][0]).toBe('https://openrouter.ai/api/v1/chat/completions')
+    const headers = (fn.mock.calls[0][1] as { headers: Record<string, string> }).headers
+    expect(headers.Authorization).toBe('Bearer sk-or-test')
+    expect(headers['X-Title']).toBe('Ledger')
   })
 
-  it('sends the request and parses the response', async () => {
+  it('sends the request with max_tokens and parses the response', async () => {
+    const fn = mockFetch()
     expect(await createOpenRouterProvider(OPTS).complete('x')).toBe('ok')
-    expect(createMock.mock.calls[0][0]).toMatchObject({ model: 'openai/gpt-4o', max_tokens: 256 })
+    const body = JSON.parse((fn.mock.calls[0][1] as { body: string }).body)
+    expect(body).toMatchObject({ model: 'openai/gpt-4o', max_tokens: 256 })
   })
 })

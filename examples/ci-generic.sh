@@ -6,6 +6,7 @@
 #   - node (>=18) and git on PATH
 #   - full git history with tags fetched (e.g. `git fetch --tags --unshallow` in CI)
 #   - a provider API key exported in the environment
+#   - a ledger.config.yaml committed to the repo (run `ledger init`) — sets provider & model
 #
 # Usage:
 #   OPENAI_API_KEY=sk-... ./ci-generic.sh [output-file]
@@ -16,9 +17,8 @@ set -euo pipefail
 
 OUT="${1:-RELEASE_NOTES.md}"
 
-# @beta during the beta; drop the tag at stable v1.
-npx --yes @anishhs/ledger@beta generate \
-  --provider openai \
+# Provider and model are read from ledger.config.yaml.
+npx --yes @anishhs/ledger generate \
   --since-last-tag \
   --output-file "$OUT"
 

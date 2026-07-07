@@ -1,4 +1,4 @@
-name: 'Ledger Release Notes'
+name: 'Ledger — AI-powered release notes'
 description: 'Generate AI-powered release notes from git history (commits + diffs).'
 author: 'anishhs'
 branding:
@@ -62,16 +62,31 @@ runs:
       run: |
         set -euo pipefail
 
+        # Determine the provider for api-key routing. The `provider` input wins; if it's
+        # omitted (the recommended setup, where provider lives in a committed ledger config),
+        # read it from that file so the key can still be routed to the right *_API_KEY var.
+        provider="${INPUT_PROVIDER:-}"
+        if [ -z "$provider" ] && [ -n "${INPUT_API_KEY:-}" ]; then
+          for f in ledger.config.yaml ledger.config.yml .ledger.yaml .ledger.yml; do
+            [ -f "$f" ] || continue
+            line="$(sed -n 's/^[[:space:]]*provider:[[:space:]]*//p' "$f" | head -1)"
+            line="${line%%#*}"                              # strip a trailing comment
+            provider="$(printf '%s' "$line" | tr -cd 'a-z-')"  # keep only provider-name chars
+            [ -n "$provider" ] && break
+          done
+        fi
+
         # Map a generic api-key input to the provider-specific environment variable.
         if [ -n "${INPUT_API_KEY:-}" ]; then
-          case "${INPUT_PROVIDER:-}" in
+          case "$provider" in
             openai)            export OPENAI_API_KEY="$INPUT_API_KEY" ;;
             anthropic)         export ANTHROPIC_API_KEY="$INPUT_API_KEY" ;;
             gemini)            export GEMINI_API_KEY="$INPUT_API_KEY" ;;
             openrouter)        export OPENROUTER_API_KEY="$INPUT_API_KEY" ;;
             bedrock)           export BEDROCK_API_KEY="$INPUT_API_KEY" ;;
             openai-compatible) export LEDGER_API_KEY="$INPUT_API_KEY" ;;
-            *) echo "::warning::api-key provided but provider '${INPUT_PROVIDER:-}' has no key mapping; ignoring" ;;
+            "") echo "::error::api-key was provided but no provider could be determined — set the 'provider' input or commit a ledger.config.yaml with a 'provider:' field."; exit 2 ;;
+            *) echo "::warning::api-key provided but provider '$provider' has no key mapping; ignoring" ;;
           esac
         fi
 
