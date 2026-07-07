@@ -1,5 +1,6 @@
 # Example: generate release notes on every version tag using the composite action.
 # Copy this into your own repo's .github/workflows/ and set the provider secret.
+# Provider and model come from the ledger.config.yaml committed to your repo (run `ledger init`).
 name: Release Notes (example)
 
 on:
@@ -17,14 +18,11 @@ jobs:
         with:
           fetch-depth: 0 # full history + tags so the range can be derived
 
-      # Beta: pin the action to the beta tag and run the beta build. At stable v1,
-      # use `anishhs-gh/ledger@v1` and drop the `package:` override.
-      - uses: anishhs-gh/ledger@v1.0.0-beta.0
+      # Pin to the floating `@v1` tag, or a specific release like `anishhs-gh/ledger@v1.0.0`.
+      - uses: anishhs-gh/ledger@v1
         with:
-          provider: openai
-          api-key: ${{ secrets.OPENAI_API_KEY }}
+          api-key: ${{ secrets.OPENAI_API_KEY }}   # the only secret; provider/model from ledger.config.yaml
           output-file: RELEASE_NOTES.md
-          package: '@anishhs/ledger@beta'
           # args: '--audience business'   # any extra flags
 
       - uses: actions/upload-artifact@v4

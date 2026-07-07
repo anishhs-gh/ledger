@@ -5,11 +5,13 @@ import { createGit, resolveRange, resolveCiRange, collectCommits } from '../git/
 import { analyzeDiff } from '../git/diff'
 import { reduceContext } from '../context/reducer'
 import { buildPrompt } from '../prompts/generate'
-import { createProvider } from '../providers'
+import { createProvider, DEFAULT_MAX_TOKENS } from '../providers'
 import { formatOutput } from '../output/formatter'
 import { writeNotesFile } from '../output/writer'
 import { detectCi } from '../ci/detect'
 import { writeStepSummary } from '../ci/summary'
+import { checkForUpdate } from '../update/notifier'
+import { VERSION } from '../version'
 import { CliError, EXIT, exitCodeFor } from '../errors'
 import type { ChangeAnalysis, Audience, OutputFormat, WriteMode } from '../types'
 
@@ -112,9 +114,14 @@ export const generateCommand = new Command('generate')
 
       if (opts.dryRun) {
         const estTokens = Math.ceil(prompt.length / 4)
+        // Many providers count the reserved output (max_tokens) against the same budget as the
+        // input, so show the total that will actually be requested — a large max_tokens can push
+        // an otherwise-fine prompt over a per-minute or per-request limit.
+        const maxOut = config.maxTokens ?? DEFAULT_MAX_TOKENS
         log(
           `Dry run — ${commits.length} commit(s), ${files.length} file(s). ` +
-          `Prompt ~${prompt.length} chars (~${estTokens} tokens). No AI call made.\n`
+          `Prompt ~${prompt.length} chars (~${estTokens} tokens) + up to ${maxOut} output ` +
+          `= ~${estTokens + maxOut} tokens requested. No AI call made.\n`
         )
         process.stdout.write(prompt + '\n')
         return
@@ -124,6 +131,12 @@ export const generateCommand = new Command('generate')
         `Found ${commits.length} commit(s), ${files.length} file(s) changed. ` +
         `Generating with ${config.provider}/${config.model}...\n`
       )
+
+      // Kick off the update check now so it runs *during* the AI request (which always takes
+      // longer) — awaited after writing, it adds no perceptible time. `checkForUpdate` already
+      // swallows every failure (network error, timeout, bad response) and returns null; the extra
+      // `.catch` guarantees a floating rejection can never surface if the AI call throws first.
+      const updateNotice = checkForUpdate(VERSION).catch(() => null)
 
       const provider = createProvider(config)
       const content = await provider.complete(prompt)
@@ -157,6 +170,10 @@ export const generateCommand = new Command('generate')
       // commander maps --no-summary to opts.summary === false
       const wroteSummary = writeStepSummary(ci, formatOutput(notes, 'markdown') + '\n', opts.summary !== false)
       if (wroteSummary) log(`Appended release notes to CI step summary\n`)
+
+      // The check was started before the AI call, so it's already resolved — awaiting is instant.
+      const notice = await updateNotice
+      if (notice) log(notice)
     } catch (err) {
       const message = err instanceof CliError ? err.message : (err as Error).message
       process.stderr.write(`Error: ${message}\n`)

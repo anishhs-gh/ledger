@@ -25,7 +25,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build (CJS + ESM)
+      - name: Build
         run: npm run build
 
       - name: Verify npm auth & publish permission

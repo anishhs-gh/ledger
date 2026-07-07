@@ -1,45 +1,41 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-
-const { createMock, ctorArgs } = vi.hoisted(() => ({
-  createMock: vi.fn(),
-  ctorArgs: [] as Array<Record<string, unknown>>,
-}))
-
-vi.mock('openai', () => ({
-  default: class {
-    chat = { completions: { create: createMock } }
-    constructor(args: Record<string, unknown>) { ctorArgs.push(args) }
-  },
-}))
-
 import { createOllamaProvider } from '../src/providers/ollama'
 
 const OPTS = { model: 'llama3.2', maxTokens: 256, timeout: 60_000, maxRetries: 0 }
 const savedEnv = { ...process.env }
 
-beforeEach(() => {
-  createMock.mockReset()
-  createMock.mockResolvedValue({ choices: [{ message: { content: 'ok' } }] })
-  ctorArgs.length = 0
-  delete process.env.OLLAMA_BASE_URL
-})
-afterEach(() => { process.env = { ...savedEnv } })
+function mockFetch() {
+  const fn = vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    headers: new Headers(),
+    json: async () => ({ choices: [{ message: { content: 'ok' } }] }),
+  }))
+  vi.stubGlobal('fetch', fn)
+  return fn
+}
+
+beforeEach(() => { delete process.env.OLLAMA_BASE_URL })
+afterEach(() => { vi.unstubAllGlobals(); process.env = { ...savedEnv } })
 
 describe('ollama provider', () => {
-  it('defaults to the local Ollama endpoint with a placeholder key', () => {
-    createOllamaProvider(OPTS)
-    expect(ctorArgs[0]).toMatchObject({ apiKey: 'ollama', baseURL: 'http://localhost:11434/v1' })
+  it('defaults to the local Ollama endpoint', async () => {
+    const fn = mockFetch()
+    await createOllamaProvider(OPTS).complete('x')
+    expect(fn.mock.calls[0][0]).toBe('http://localhost:11434/v1/chat/completions')
   })
 
-  it('honours OLLAMA_BASE_URL', () => {
+  it('honours OLLAMA_BASE_URL', async () => {
     process.env.OLLAMA_BASE_URL = 'http://gpu-box:11434/v1'
-    createOllamaProvider(OPTS)
-    expect(ctorArgs[0]).toMatchObject({ baseURL: 'http://gpu-box:11434/v1' })
+    const fn = mockFetch()
+    await createOllamaProvider(OPTS).complete('x')
+    expect(fn.mock.calls[0][0]).toBe('http://gpu-box:11434/v1/chat/completions')
   })
 
   it('sends the request and parses the response', async () => {
-    const out = await createOllamaProvider(OPTS).complete('x')
-    expect(out).toBe('ok')
-    expect(createMock.mock.calls[0][0]).toMatchObject({ model: 'llama3.2', max_tokens: 256 })
+    const fn = mockFetch()
+    expect(await createOllamaProvider(OPTS).complete('x')).toBe('ok')
+    const body = JSON.parse((fn.mock.calls[0][1] as { body: string }).body)
+    expect(body).toMatchObject({ model: 'llama3.2', max_tokens: 256 })
   })
 })

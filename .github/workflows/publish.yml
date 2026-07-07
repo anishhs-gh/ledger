@@ -16,9 +16,9 @@ on:
   workflow_dispatch:
     inputs:
       dist-tag:
-        description: "npm dist-tag to publish under (use 'beta' during the beta, 'latest' for stable)"
+        description: "npm dist-tag to publish under ('latest' for a stable release, 'beta'/'next' for a prerelease)"
         required: true
-        default: 'beta'
+        default: 'latest'
 
 # Prevent overlapping publishes.
 concurrency:
@@ -62,7 +62,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build (CJS + ESM)
+      - name: Build
         run: npm run build
 
       - name: Read package version

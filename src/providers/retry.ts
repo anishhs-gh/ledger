@@ -84,6 +84,31 @@ function httpStatus(err: unknown): number | undefined {
   return typeof status === 'number' ? status : undefined
 }
 
+// A prompt (plus the reserved max_tokens output) that exceeds the provider's per-request or
+// per-minute token budget. HTTP 413 is the standard signal; some providers instead return a
+// 400/429 whose message names a context-length or tokens-per-minute limit — match those too.
+function isTooLarge(err: unknown, status: number | undefined): boolean {
+  if (status === 413) return true
+  const message = (err as Error)?.message ?? ''
+  return /too large|context length|maximum context|reduce (your|the) (message|prompt)|tokens per minute/i.test(message)
+}
+
+// Pull the provider's own error text out of an HttpError message (which looks like
+// `HTTP 413: {"error":{"message":"..."}}`) so we can surface it verbatim — provider messages
+// often carry the exact limit and an upgrade link that are genuinely useful.
+function providerMessage(err: unknown): string | undefined {
+  const raw = (err as Error)?.message ?? ''
+  const body = raw.replace(/^HTTP\s+\d+:\s*/i, '')
+  try {
+    const parsed = JSON.parse(body) as { error?: { message?: string }; message?: string }
+    const msg = parsed?.error?.message ?? parsed?.message
+    if (typeof msg === 'string' && msg.trim()) return msg.trim()
+  } catch {
+    // body wasn't JSON — no clean detail to extract
+  }
+  return undefined
+}
+
 // Extract a Retry-After delay (ms) from an error's response headers, if present.
 // Supports both the numeric "seconds" form and the HTTP-date form. Returns undefined
 // when there's no usable hint, so the caller falls back to exponential backoff.
@@ -143,6 +168,16 @@ function normalizeError(err: unknown, maxRetries: number): CliError {
   if (status === 429) {
     return new CliError(
       `Rate limited by the provider after ${maxRetries + 1} attempt(s). Try again later or lower request frequency.`,
+      EXIT.RUNTIME
+    )
+  }
+  if (isTooLarge(err, status)) {
+    const detail = providerMessage(err)
+    return new CliError(
+      `Request too large for the provider's token limit${detail ? ` — ${detail}` : '.'}\n` +
+      'Reduce the request: narrow the range (fewer/smaller commits), lower --max-tokens, set a ' +
+      'smaller maxDiffLines in config, or use a higher-tier key or a provider with a larger limit. ' +
+      'Run with --dry-run first to see the total tokens requested.',
       EXIT.RUNTIME
     )
   }

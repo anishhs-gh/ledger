@@ -13,8 +13,8 @@ pipeline {
     stage('Release notes') {
       steps {
         // Ensure tags/history are present (configure full clone in the SCM step).
-        // @beta during the beta; drop the tag at stable v1.
-        sh 'npx --yes @anishhs/ledger@beta generate --provider openai -o RELEASE_NOTES.md'
+        // Provider and model come from the committed ledger.config.yaml (run `ledger init`).
+        sh 'npx --yes @anishhs/ledger generate -o RELEASE_NOTES.md'
         archiveArtifacts artifacts: 'RELEASE_NOTES.md', fingerprint: true
       }
     }
