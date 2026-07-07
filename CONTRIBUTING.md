@@ -1,7 +1,7 @@
 # Contributing to ledger
 
-Thanks for your interest in improving `ledger`! This project is in public **beta**, so bug reports,
-reproductions, and focused pull requests are especially welcome.
+Thanks for your interest in improving `ledger`! Bug reports, reproductions, and focused pull
+requests are all very welcome.
 
 ## Ways to help
 
@@ -13,7 +13,7 @@ reproductions, and focused pull requests are especially welcome.
 
 ## Prerequisites
 
-- **Node.js >= 18** and npm.
+- **Node.js >= 20** and npm.
 - No API key is needed for development — the test suite mocks providers and never makes network calls.
 
 ## Getting started
@@ -63,7 +63,9 @@ The default integration branch is **`develop`**; **`master`** is the release bra
   `AIProvider`), register it in `src/providers/index.ts`, add it to `VALID_PROVIDERS` /
   `DEFAULT_MODELS` in `src/config/loader.ts`, and update the README provider table. Note that any
   service speaking the OpenAI Chat Completions API is already covered by the `openai-compatible`
-  provider — prefer that over hardcoding a new vendor unless it needs a distinct SDK or auth.
+  provider — prefer that over hardcoding a new vendor unless it needs a distinct API shape or auth.
+  Providers talk to their HTTP API directly via `fetch` (see `src/providers/http.ts`); no vendor
+  SDKs.
 - **User-facing changes** (flags, config, behavior) must update the README and the `## [Unreleased]`
   CHANGELOG section in the same PR.
 

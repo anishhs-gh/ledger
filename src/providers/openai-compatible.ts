@@ -1,5 +1,5 @@
-import OpenAI from 'openai'
 import type { AIProvider, ProviderOptions } from './types'
+import { createOpenAIChatProvider } from './http'
 
 // Generic provider for any service that speaks the OpenAI Chat Completions API —
 // Groq, Together, Fireworks, DeepSeek, Mistral, xAI, Perplexity, Azure OpenAI, or a
@@ -13,26 +13,13 @@ export function createOpenAICompatibleProvider(opts: ProviderOptions): AIProvide
   }
 
   const keyEnv = opts.apiKeyEnv ?? 'LEDGER_API_KEY'
-  // Some self-hosted servers need no key; fall back to a placeholder so the SDK is happy.
-  // Real cloud endpoints will surface a clear 401 if the key is missing.
+  // Some self-hosted servers need no key; fall back to a placeholder so the Authorization
+  // header is well-formed. Real cloud endpoints will surface a clear 401 if the key is missing.
   const apiKey = process.env[keyEnv] ?? 'not-needed'
 
-  const client = new OpenAI({
-    apiKey,
+  return createOpenAIChatProvider(opts, {
     baseURL: opts.baseURL,
-    timeout: opts.timeout,
-    maxRetries: 0,
-    defaultHeaders: opts.headers,
+    apiKey,
+    headers: opts.headers,
   })
-
-  return {
-    async complete(prompt: string): Promise<string> {
-      const res = await client.chat.completions.create({
-        model: opts.model,
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: opts.maxTokens,
-      })
-      return res.choices[0]?.message?.content ?? ''
-    },
-  }
 }

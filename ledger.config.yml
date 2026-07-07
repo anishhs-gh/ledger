@@ -1,0 +1,42 @@
+# Ledger — AI-powered release notes
+#
+# This is ledger's own config, committed so the project dogfoods the tool and so anyone
+# browsing the repo has a working example to copy. `ledger init` scaffolds a file like this.
+# Only `provider` is required; everything else has a sensible default. The API key is NOT
+# stored here — it's read from an environment variable / CI secret (see the table below).
+
+# Provider: openai | anthropic | gemini | openrouter | ollama | bedrock | openai-compatible
+provider: bedrock
+
+# Model (a per-provider default is used if omitted; required for openai-compatible).
+model: openai.gpt-oss-20b-1:0
+
+# Default audience when --audience isn't passed: engineering | business | qa
+# audience: engineering
+
+# Cap per-file diff lines sent to the AI — trims tokens on very large PRs.
+# maxDiffLines: 100
+
+# Max tokens for the AI's response (default 4096). Also counts against some providers'
+# per-minute token limits, so keep it modest on tight free tiers. Models with reasoning on by default
+# (e.g. Claude Sonnet 5) spend part of this budget thinking — raise it if notes truncate.
+# maxTokens: 4096
+
+# Per-request timeout in milliseconds (default 60000).
+# timeout: 60000
+
+# Retry attempts on transient provider errors — 429 / 5xx / network (default 3).
+# maxRetries: 3
+
+# --- Using any OpenAI-compatible service instead? (Groq, Together, Fireworks, DeepSeek,
+# Azure OpenAI, a local vLLM/LiteLLM server, ...) Swap the two lines above for: ------------
+# provider: openai-compatible
+# baseURL: https://api.groq.com/openai/v1   # the service's endpoint
+# model: llama-3.3-70b-versatile
+# apiKeyEnv: GROQ_API_KEY                    # optional — env var to read the key from
+#                                            # (defaults to LEDGER_API_KEY)
+
+# API key env var by provider:
+#   openai → OPENAI_API_KEY   anthropic → ANTHROPIC_API_KEY   gemini → GEMINI_API_KEY
+#   openrouter → OPENROUTER_API_KEY   bedrock → BEDROCK_API_KEY (or AWS IAM creds)
+#   ollama → none (local)     openai-compatible → LEDGER_API_KEY (or your apiKeyEnv)

@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/anishhs-gh/ledger/master/ledger.svg" alt="ledger" width="80" />
+  <img src="https://raw.githubusercontent.com/anishhs-gh/ledger/master/ledger.svg" alt="ledger" width="64" />
 </p>
 
 <h1 align="center">ledger</h1>
 
-[![npm beta](https://img.shields.io/npm/v/@anishhs/ledger/beta.svg)](https://www.npmjs.com/package/@anishhs/ledger)
+[![npm](https://img.shields.io/npm/v/@anishhs/ledger.svg)](https://www.npmjs.com/package/@anishhs/ledger)
 [![CI](https://github.com/anishhs-gh/ledger/actions/workflows/ci.yml/badge.svg)](https://github.com/anishhs-gh/ledger/actions/workflows/ci.yml)
 [![license: MIT](https://img.shields.io/npm/l/@anishhs/ledger.svg)](./LICENSE)
 [![node](https://img.shields.io/node/v/@anishhs/ledger.svg)](https://nodejs.org)
@@ -16,13 +16,15 @@ context, and asks the AI provider of your choice to write release notes tailored
 specific audience (engineering, business, or QA). Bring your own API key; no vendor lock-in.
 
 ```bash
-npx @anishhs/ledger@beta generate --since-last-tag
+npx @anishhs/ledger generate --since-last-tag
 ```
 
-> [!IMPORTANT]
-> **Beta.** `ledger` is in public beta, published under the npm `beta` dist-tag — install with
-> **`@beta`** (a plain `@anishhs/ledger` won't resolve until the stable `1.0.0`). Flags and generated
-> output may still change. Found a rough edge? Please [open an issue](https://github.com/anishhs-gh/ledger/issues).
+> [!TIP]
+> **~3.5 MB install — 16× smaller than the beta.** The public beta (`1.0.0-beta.1`) bundled a
+> vendor SDK for every provider and weighed ~58 MB. Stable `1.0.0` is **SDK-free**: every provider
+> talks to its API over plain `fetch`, dropping the install to ~3.5 MB. Since `ledger` is meant to
+> be run with `npx`, that means far faster cold starts and much less bandwidth per run — which is
+> why it's worth calling out.
 
 ---
 
@@ -39,22 +41,37 @@ notes describe *what actually changed* — not just what someone typed in a comm
 - **Cheap to preview:** `--dry-run` assembles the context and estimates tokens without
   spending anything.
 
+## How it works
+
+For a commit range, `ledger`:
+
+1. **Collects** the commits *and their actual code diffs* with `git`.
+2. **Reduces** them into a focused context, capping per-file diff size (`maxDiffLines`) so large
+   PRs stay within token budgets.
+3. **Prompts** your chosen AI provider — one non-streaming request — to write notes for your
+   chosen **audience** (engineering / business / QA).
+4. **Writes** the result as Markdown (default) or JSON, to stdout or a file.
+
+Nothing leaves your machine except that single prompt to the provider you configured
+(bring your own key). `ledger` stores nothing and calls no other service.
+
 ## Install
+
+**Requirements:** Node ≥ 20, `git` on `PATH`, and an API key for your chosen provider
+(none for local Ollama).
 
 No install needed — run it with `npx`:
 
 ```bash
-npx @anishhs/ledger@beta generate --since-last-tag
+npx @anishhs/ledger generate --since-last-tag
 ```
 
 Or install globally:
 
 ```bash
-npm install -g @anishhs/ledger@beta
+npm install -g @anishhs/ledger
 ledger generate --since-last-tag
 ```
-
-> During the beta, keep the `@beta` tag on every install/`npx` command. Drop it once stable `1.0.0` ships.
 
 ## Quickstart
 
@@ -97,7 +114,7 @@ a tag build uses *previous tag → this tag*; a PR/MR build uses *base branch �
 | `--stdout` | Also echo the notes to stdout when writing to `--output-file` |
 | `--append` | Append to `--output-file` instead of overwriting (newest at the bottom) |
 | `--prepend` | Prepend to `--output-file` (newest on top, inserted below a leading `#` title) — ideal for a `CHANGELOG.md` |
-| `--max-tokens <n>` | Max tokens for the AI response |
+| `--max-tokens <n>` | Max tokens for the AI response (default 4096) |
 | `--timeout <ms>` | Per-request timeout (default 60000) |
 | `--quiet` | Suppress progress on stderr (errors still shown) |
 | `--dry-run` | Assemble context + estimate tokens, **without** calling the AI |
@@ -110,22 +127,85 @@ Without `--output-file`, notes are written to **stdout** and all progress/loggin
 **stderr**, so `ledger generate > NOTES.md` is always clean. With `--output-file`, the file is
 the output and stdout stays quiet unless you add `--stdout`.
 
+### JSON output (for programmatic use)
+
+`--output json` emits a structured object instead of Markdown — handy when another tool consumes
+the notes (posting a PR comment, feeding a release dashboard, etc.). `content` holds the AI-written
+body; the rest is metadata `ledger` computed:
+
+```jsonc
+{
+  "title": "Release Notes",
+  "date": "2026-07-07",
+  "range": "v1.2.0..HEAD",
+  "audience": "engineering",
+  "commits": 12,
+  "filesChanged": 34,
+  "content": "# Release Notes\n\n## New Features\n...",   // the AI-generated markdown body
+  "repo": "owner/repo",        // present in CI when detected
+  "ref": "refs/tags/v1.3.0",   // present in CI when detected
+  "runUrl": "https://..."      // present in CI when detected
+}
+```
+
+```bash
+# e.g. pull just the body out with jq
+ledger generate --since-last-tag --output json | jq -r .content
+```
+
 ## Configuration
 
-Create `ledger.config.yaml` (or run `ledger init`):
+Run `ledger init` to scaffold **`ledger.config.yaml`** — one small YAML file that holds all of
+`ledger`'s settings (provider, model, token limits, …). **Commit it to your repo.** It's the single
+source of truth used both on your laptop and in CI, so you never have to repeat provider/model flags
+anywhere. Everything in it is optional except `provider`.
 
 ```yaml
 provider: openai      # openai | anthropic | gemini | openrouter | ollama | bedrock | openai-compatible
 model: gpt-4o         # optional — a sensible default is used per provider (required for openai-compatible)
-# audience: engineering
-# maxDiffLines: 100   # cap per-file diff lines sent to the AI (reduces tokens)
-# maxTokens: 4096
-# timeout: 60000
-# maxRetries: 3
+# audience: engineering  # default audience when --audience isn't passed
+# maxDiffLines: 100   # cap per-file diff lines sent to the AI (reduces tokens on big PRs)
+# maxTokens: 4096     # max tokens for the AI's response (default 4096)
+# timeout: 60000      # per-request timeout (ms)
+# maxRetries: 3       # retry attempts on transient provider errors (429/5xx/network)
+```
+
+Only the **API key** stays out of the file — keep it in an environment variable (locally) or a
+secret (in CI). See [Providers & keys](#providers--keys) for the variable each provider reads.
+
+### Accepted config file names
+
+`ledger` looks in the current directory for the **first** of these that exists (so `.yaml` wins over
+`.yml` if you have both), or point at any path with `--config <path>`:
+
+| File | Format |
+| --- | --- |
+| `ledger.config.yaml` | YAML _(what `ledger init` creates)_ |
+| `ledger.config.yml` | YAML |
+| `.ledger.yaml` | YAML (dotfile) |
+| `.ledger.yml` | YAML (dotfile) |
+| `ledger.config.json` | JSON |
+
+`.yaml` and `.yml` are treated identically — pick whichever your repo prefers. A JSON config uses the
+same keys:
+
+```json
+{
+  "provider": "openai",
+  "model": "gpt-4o",
+  "maxTokens": 4096
+}
+```
+
+```bash
+# Or keep it anywhere and pass the path explicitly:
+ledger generate --since-last-tag --config config/ledger.json
 ```
 
 **Precedence (highest first):** `LEDGER_PROVIDER` / `LEDGER_MODEL` env vars → CLI flags →
-config file → built-in defaults.
+config file → built-in defaults. So the committed file sets your defaults, and a flag lets you
+override one run without editing it. (An **empty** env var — e.g. an unset `vars.LEDGER_MODEL` in
+CI — is ignored, so it falls back to the config file rather than blanking the value.)
 
 ### Updating a CHANGELOG in place
 
@@ -190,7 +270,18 @@ appends the notes to the run's **step summary**.
 > Two requirements on every runner: **full git history + tags** (CI often shallow-clones —
 > see below) and a **provider API key** from your secret store.
 
+**The recommended setup: commit `ledger.config.yaml`, and let CI just run `ledger generate`.**
+Because your provider and model live in that file (see [Configuration](#configuration)), the CI job
+carries no ledger settings at all — it only supplies the API key as a secret. Switching providers or
+models later is a one-line edit to the committed file, with nothing to change across your pipelines.
+The snippets below assume a `ledger.config.yaml` is checked in.
+
 ### GitHub Actions (composite action)
+
+> **The action is optional** — it's just a convenience wrapper around `npx @anishhs/ledger`. If you
+> prefer not to depend on it, skip straight to the plain `npx` step [below](#prefer-raw-npx) — it
+> does exactly the same thing. Everything `ledger` does (CI detection, range derivation, step
+> summary) lives in the CLI, not the action.
 
 ```yaml
 name: Release notes
@@ -204,41 +295,89 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # full history + tags so the range can be derived
-      - uses: anishhs-gh/ledger@v1.0.0-beta.0
+      - uses: anishhs-gh/ledger@v1
         with:
-          provider: openai
-          api-key: ${{ secrets.OPENAI_API_KEY }}
+          api-key: ${{ secrets.OPENAI_API_KEY }}   # the only secret; provider/model come from ledger.config.yaml
           output-file: RELEASE_NOTES.md
-          package: '@anishhs/ledger@beta' # beta only; drop at stable v1
 ```
 
-> **Beta:** pin the action to `anishhs-gh/ledger@v1.0.0-beta.0` (the floating `@v1` tag arrives with stable
-> `1.0.0`) and set `package: '@anishhs/ledger@beta'` so it runs the beta build. At stable, use
-> `anishhs-gh/ledger@v1` and the default `package`.
+> Pin the action to the floating `anishhs-gh/ledger@v1` tag (or a specific release, e.g.
+> `anishhs-gh/ledger@v1.0.0`) to control when you pick up updates.
 
-**Action inputs:**
+**Action inputs** — all optional; anything you omit is read from the committed `ledger.config.yaml`.
+Set them here only to override the file for this workflow:
 
 | Input | Default | Description |
 | --- | --- | --- |
-| `provider` | — | `openai` \| `anthropic` \| `gemini` \| `openrouter` \| `ollama` \| `bedrock` \| `openai-compatible` |
-| `model` | per-provider | Model name (required for `openai-compatible`) |
-| `base-url` | — | OpenAI-compatible API base URL (for `openai-compatible`) |
 | `api-key` | — | Provider key; mapped to the correct `*_API_KEY` var, or `LEDGER_API_KEY` for `openai-compatible` (pass a secret) |
+| `provider` | from config | `openai` \| `anthropic` \| `gemini` \| `openrouter` \| `ollama` \| `bedrock` \| `openai-compatible` |
+| `model` | from config | Model name |
+| `base-url` | from config | OpenAI-compatible API base URL (for `openai-compatible`) |
 | `audience` | `engineering` | `engineering` \| `business` \| `qa` |
 | `output` | `markdown` | `markdown` \| `json` |
 | `output-file` | — | Write notes to this file |
 | `args` | — | Extra raw flags, e.g. `--since-last-tag --fail-on-empty` |
-| `package` | `@anishhs/ledger` | npm spec to run (during beta pass `@anishhs/ledger@beta`; or pin a version, e.g. `@anishhs/ledger@1.0.0-beta.0`) |
+| `package` | `@anishhs/ledger` | npm spec to run (pin a version if you like, e.g. `@anishhs/ledger@1.0.0`) |
 
 Output: `file` — the path written (equals `output-file`).
 
-Prefer raw `npx`? That works too:
+<a id="prefer-raw-npx"></a>
+Prefer raw `npx` (no action dependency)? That works too — still just the key plus the committed config:
 
 ```yaml
-      - run: npx @anishhs/ledger@beta generate -o RELEASE_NOTES.md
+      - run: npx @anishhs/ledger generate -o RELEASE_NOTES.md
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 ```
+
+### Attach the notes to a GitHub Release
+
+The most common end-to-end flow: on a version tag, generate the notes and publish them as the
+release body. Generation is **best-effort** — if the AI call fails, fall back to GitHub's
+auto-generated notes so a release is never blocked. (This is exactly what `ledger`'s own
+[`publish.yml`](./.github/workflows/publish.yml) does.)
+
+```yaml
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write   # required to create the release
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0                     # full history + tags
+
+      - name: Generate notes (best-effort)
+        id: notes
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}   # provider/model from ledger.config.yaml
+        run: |
+          set -uo pipefail
+          file="$RUNNER_TEMP/NOTES.md"
+          if npx --yes @anishhs/ledger generate --since-last-tag -o "$file" --quiet && [ -s "$file" ]; then
+            echo "file=$file" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::ledger failed — falling back to GitHub auto-generated notes."
+          fi
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -n "${{ steps.notes.outputs.file }}" ]; then
+            gh release create "${{ github.ref_name }}" --notes-file "${{ steps.notes.outputs.file }}"
+          else
+            gh release create "${{ github.ref_name }}" --generate-notes
+          fi
+```
+
+The two keys to the fallback: `set -uo pipefail` (**not** `-e`) so a failed generation doesn't
+abort the step, and the `&& [ -s "$file" ]` check so an *empty* file also triggers the fallback.
 
 ### GitLab CI
 
@@ -248,19 +387,21 @@ release-notes:
   rules:
     - if: $CI_COMMIT_TAG
   variables:
-    GIT_DEPTH: "0"
+    GIT_DEPTH: "0"   # full history + tags
   script:
-    - npx --yes @anishhs/ledger@beta generate --provider openai -o RELEASE_NOTES.md
+    - npx --yes @anishhs/ledger generate -o RELEASE_NOTES.md   # provider/model from ledger.config.yaml
   artifacts:
     paths: [RELEASE_NOTES.md]
 ```
+
+Set `OPENAI_API_KEY` (or your provider's key) as a masked CI/CD variable.
 
 ### Jenkins
 
 ```groovy
 environment { OPENAI_API_KEY = credentials('openai-api-key') }
 steps {
-  sh 'npx --yes @anishhs/ledger@beta generate --provider openai -o RELEASE_NOTES.md'
+  sh 'npx --yes @anishhs/ledger generate -o RELEASE_NOTES.md'   // provider/model from ledger.config.yaml
 }
 ```
 
@@ -269,10 +410,11 @@ steps {
 ```bash
 git fetch --tags --unshallow || true       # ensure history + tags
 export OPENAI_API_KEY=...                   # or your provider's key
-npx @anishhs/ledger@beta generate --since-last-tag -o RELEASE_NOTES.md
+npx @anishhs/ledger generate --since-last-tag -o RELEASE_NOTES.md   # config from ledger.config.yaml
 ```
 
-Copy-paste templates for each platform live in [`examples/`](./examples).
+Copy-paste templates for each platform live in [`examples/`](./examples) — each reads its
+settings from a committed `ledger.config.yaml`.
 
 ## Exit codes
 
@@ -282,6 +424,21 @@ Copy-paste templates for each platform live in [`examples/`](./examples).
 | `1` | Runtime/provider error |
 | `2` | Usage or configuration error (missing/unknown provider, bad ref, auth failure) |
 | `3` | No changes found **and** `--fail-on-empty` was set |
+
+## Troubleshooting
+
+| Symptom | Cause & fix |
+| --- | --- |
+| **Empty notes / "no changes"**, or a git "unknown revision" error on `--from` / `--since-last-tag` | CI did a **shallow clone**, so tags and history aren't present. Fetch them: `actions/checkout@v4` with `fetch-depth: 0`, GitLab `GIT_DEPTH: "0"`, or `git fetch --tags --unshallow`. |
+| **`Authentication failed …` (exit 2)** | The provider's key env var isn't set, or is wrong for the selected provider. Check the [Providers & keys](#providers--keys) table — e.g. `anthropic` reads `ANTHROPIC_API_KEY`, not `OPENAI_API_KEY`. |
+| **`Rate limited … (exit 1)`** | `ledger` already retries with backoff and honours the provider's `Retry-After`. If it still exhausts, lower run frequency, raise `maxRetries`, or switch to a higher-tier key. |
+| **Notes look truncated / empty response** | The model hit the token cap — raise `--max-tokens` (models with reasoning on by default, like Claude Sonnet 5, spend part of the budget thinking). |
+| **`Request too large` / HTTP 413** | The prompt **plus the reserved `--max-tokens` output** exceeded the provider's per-request or per-minute token limit — common on free tiers (e.g. Groq's 12k tokens/minute). Narrow the range, lower `--max-tokens`, set a smaller `maxDiffLines`, or use a higher-tier key / larger-limit provider. Run `--dry-run` first — it now prints the **total** tokens requested (prompt + reserved output). |
+| **`openai-compatible` errors about a missing baseURL/model** | That provider needs both a `baseURL` and a `model` — set them in `ledger.config.yaml`, via `LEDGER_BASE_URL` / `--base-url`, or `--model`. |
+| **Model-not-found (404 / invalid model)** | The `model` string must be exactly what your provider expects (e.g. Bedrock model IDs like `openai.gpt-oss-20b-1:0`). Check the provider's model list. |
+
+Tip: run with `--dry-run` first — it assembles the context and prints the token estimate without
+calling the AI (and without spending anything), so you can confirm the range and size are right.
 
 ## Development
 
@@ -295,7 +452,7 @@ npm run build     # tsup → dist/cli.js
 
 ## Contributing
 
-Bug reports and focused PRs are welcome — `ledger` is in beta. See
+Bug reports and focused PRs are welcome. See
 [CONTRIBUTING.md](./CONTRIBUTING.md) for the dev setup and the gitflow branch/PR workflow.
 
 ## Changelog

@@ -26,7 +26,9 @@ model: gpt-4o
 # Optional: max diff lines per file sent to the AI (reduces token usage on large PRs)
 # maxDiffLines: 100
 
-# Optional: max tokens for the AI response (default 4096)
+# Optional: max tokens for the AI response (default 4096). This output budget is also counted
+# against some providers' per-minute token limits, so lower it on tight free tiers; raise it if
+# a large diff produces truncated notes (models that reason, e.g. Claude Sonnet 5, share it).
 # maxTokens: 4096
 
 # Optional: per-request timeout in milliseconds (default 60000)
