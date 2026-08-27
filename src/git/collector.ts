@@ -6,6 +6,11 @@ import type { Commit } from '../types'
 // Git's well-known empty-tree object. Used as the `from` side of a range to include the
 // very first (root) commit — `<empty-tree>..HEAD` is accepted by both `git diff` and
 // `git log`, whereas `HEAD~N` throws once N reaches past the root.
+//
+// It is also the correct anchor for a FIRST release. The root commit itself is not a
+// usable `from`: a range is half-open, so `<root>..<tag>` excludes the root commit and
+// everything it introduced — the entire initial import — and resolves to nothing at all
+// in a repo whose only commit is the root. The empty tree includes it.
 export const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
 
 export async function createGit(cwd: string = process.cwd()): Promise<SimpleGit> {
@@ -25,7 +30,7 @@ export async function resolveRange(
 
   // Default behaviour when no flags given: use last tag
   if (opts.sinceLastTag || (!opts.from && opts.last === undefined)) {
-    const from = await getLastTag(git)
+    const from = await resolveSinceLastTag(git, to)
     return { from, to }
   }
 
@@ -52,12 +57,11 @@ export async function resolveCiRange(
   git: SimpleGit,
   ctx: CiContext
 ): Promise<{ from: string; to: string } | null> {
-  // Tag build: previous tag .. this tag. Fall back to repo root if it's the first tag.
+  // Tag build: previous tag .. this tag. On the FIRST release there is no previous tag,
+  // so anchor to the empty tree — that covers the whole history including the root commit.
   if (ctx.tag) {
     const prevTag = await getPreviousTag(git, ctx.tag)
-    const from = prevTag ?? (await getRootCommit(git))
-    if (!from) return null
-    return { from, to: ctx.tag }
+    return { from: prevTag ?? EMPTY_TREE, to: ctx.tag }
   }
 
   // PR/MR build: base branch .. HEAD. Prefer the remote-tracking ref (CI usually fetches it).
@@ -83,22 +87,50 @@ async function refExists(git: SimpleGit, ref: string): Promise<boolean> {
   }
 }
 
-async function getPreviousTag(git: SimpleGit, tag: string): Promise<string | null> {
+// Resolve the `from` side of a since-last-tag range ending at `to`.
+//
+// Every branch here used to fail on a first release:
+//   - no tags at all → hard error telling you to create a tag, even though "everything so
+//     far" is exactly what a first release's notes should cover;
+//   - `to` is itself the tag you just cut (v1.0.0 tagged, then `ledger generate`) →
+//     `describe` resolves to that same tag and `v1.0.0..v1.0.0` is empty;
+//   - that tag is the only one → there is no earlier tag to step back to.
+// All three now anchor to the empty tree, so the notes cover the full history.
+async function resolveSinceLastTag(git: SimpleGit, to: string): Promise<string> {
+  const lastTag = await describeTag(git, to)
+  if (!lastTag) return EMPTY_TREE
+
+  // `describe` anchors at `to` itself, so a freshly-cut tag on `to` resolves to itself and
+  // would produce an empty range. Step back to the tag before it (the real "last release").
+  if (!(await isSameCommit(git, lastTag, to))) return lastTag
+
+  return (await getPreviousTag(git, lastTag)) ?? EMPTY_TREE
+}
+
+// The most recent tag reachable from `ref`, or null when there is none.
+async function describeTag(git: SimpleGit, ref: string): Promise<string | null> {
   try {
-    const result = await git.raw(['describe', '--tags', '--abbrev=0', `${tag}^`])
+    const result = await git.raw(['describe', '--tags', '--abbrev=0', ref])
     return result.trim() || null
   } catch {
     return null
   }
 }
 
-async function getRootCommit(git: SimpleGit): Promise<string | null> {
+async function isSameCommit(git: SimpleGit, a: string, b: string): Promise<boolean> {
   try {
-    const result = await git.raw(['rev-list', '--max-parents=0', 'HEAD'])
-    return result.trim().split('\n')[0] || null
+    const [ra, rb] = await Promise.all([
+      git.raw(['rev-parse', `${a}^{commit}`]),
+      git.raw(['rev-parse', `${b}^{commit}`]),
+    ])
+    return ra.trim() === rb.trim() && ra.trim().length > 0
   } catch {
-    return null
+    return false
   }
+}
+
+async function getPreviousTag(git: SimpleGit, tag: string): Promise<string | null> {
+  return describeTag(git, `${tag}^`)
 }
 
 // Number of commits reachable from `ref`. Returns Infinity when it can't be determined
@@ -110,18 +142,6 @@ async function countCommits(git: SimpleGit, ref: string): Promise<number> {
     return Number.isFinite(n) ? n : Infinity
   } catch {
     return Infinity
-  }
-}
-
-async function getLastTag(git: SimpleGit): Promise<string> {
-  try {
-    const result = await git.raw(['describe', '--tags', '--abbrev=0'])
-    return result.trim()
-  } catch {
-    throw new CliError(
-      'No git tags found. Create a tag first, or use --from to specify a starting point.',
-      EXIT.USAGE
-    )
   }
 }
 

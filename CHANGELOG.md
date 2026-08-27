@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-27
+
+### Fixed
+
+- **First releases now produce notes instead of silently falling back.** In a repo with no
+  prior tags, every range ledger derived resolved to nothing, so the notes came out empty and
+  the calling workflow fell through to its CHANGELOG/auto-notes fallback — the AI-generated
+  notes never appeared for anyone's `v1.0.0`.
+
+  The cause was treating the **root commit** as the start of the range. A git range is
+  half-open, so `<root>..HEAD` *excludes* the root commit and everything it introduced — the
+  entire initial import — and resolves to nothing at all in a repo whose only commit is the
+  root. First releases now anchor to git's empty-tree object, which is the only `from` that
+  includes the root commit.
+
+  Three separate paths were affected:
+  - **CI tag builds** (`resolveCiRange`) — the first tag build had no previous tag and fell
+    back to the root commit.
+  - **`--since-last-tag` with no tags in the repo** — raised
+    `No git tags found. Create a tag first...`, even though "everything so far" is exactly
+    what a first release's notes should cover. It now covers the full history.
+  - **`--since-last-tag` when the only tag is the one just cut on `HEAD`** — `git describe`
+    anchors at `HEAD` and resolved to that same tag, producing the empty range
+    `v1.0.0..v1.0.0`. It now steps back to the previous tag, or to the full history when
+    there isn't one.
+
+- **`js-yaml` bumped to `^5.4.1`** (from `^5.2.0`), clearing two high-severity advisories
+  ([GHSA-724g-mxrg-4qvm](https://github.com/advisories/GHSA-724g-mxrg-4qvm),
+  [GHSA-pm4m-ph32-ghv5](https://github.com/advisories/GHSA-pm4m-ph32-ghv5)) that affect
+  `5.0.0 - 5.2.1`. The declared floor moved too, not just the lockfile, so a fresh install
+  without the lock can no longer resolve to a vulnerable version.
+
+### Changed
+
+- **Ledger's own release workflow no longer re-derives the notes range in shell.** It passes
+  `--since-last-tag` and lets ledger resolve the range, plus `--fail-on-empty` so an empty
+  range is a loud failure into the fallback rather than a silent exit 0 that writes no file.
+  If you copied the previous shell snippet (`git describe ... || git rev-list --max-parents=0`)
+  into your own pipeline, **replace it** — passing `--from` explicitly bypasses the fix above
+  and will keep dropping the root commit on first releases.
+
 ## [1.0.0] - 2026-07-07
 
 First stable release.
@@ -136,7 +177,8 @@ commits **and** the actual code diffs — and runs identically on a laptop or in
   (Node 18/20/22 → typecheck → lint → test → build), and a publish-on-tag release workflow
   with npm provenance.
 
-[Unreleased]: https://github.com/anishhs-gh/ledger/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/anishhs-gh/ledger/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/anishhs-gh/ledger/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/anishhs-gh/ledger/compare/v1.0.0-beta.1...v1.0.0
 [1.0.0-beta.1]: https://github.com/anishhs-gh/ledger/compare/v1.0.0-beta.0...v1.0.0-beta.1
 [1.0.0-beta.0]: https://github.com/anishhs-gh/ledger/releases/tag/v1.0.0-beta.0

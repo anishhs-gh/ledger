@@ -50,8 +50,43 @@ describe('resolveRange', () => {
   })
 
   it('falls back to the last tag by default', async () => {
-    const r = await resolveRange(fakeGit(args => (args[0] === 'describe' ? 'v9.9.9\n' : reject())), {})
-    expect(r).toEqual({ from: 'v9.9.9', to: 'HEAD' })
+    // describe(HEAD) -> v9.9.9, and v9.9.9 is NOT the same commit as HEAD, so it is used as-is.
+    const git = fakeGit(args => {
+      if (args[0] === 'describe') return 'v9.9.9\n'
+      if (args[0] === 'rev-parse') return args[1].startsWith('v9.9.9') ? 'tagsha\n' : 'headsha\n'
+      return reject()
+    })
+    expect(await resolveRange(git, {})).toEqual({ from: 'v9.9.9', to: 'HEAD' })
+  })
+
+  // --- first release -------------------------------------------------------
+  // Each of these produced an empty range (or a hard error) before, so the notes
+  // came out blank and callers fell through to their own fallback.
+
+  it('anchors to the empty tree when the repo has no tags at all', async () => {
+    const r = await resolveRange(fakeGit(reject), { sinceLastTag: true })
+    expect(r).toEqual({ from: EMPTY_TREE, to: 'HEAD' })
+  })
+
+  it('anchors to the empty tree when the only tag is the one just cut on HEAD', async () => {
+    // You tagged v1.0.0 and then ran ledger: describe(HEAD) -> v1.0.0, which is HEAD itself.
+    // There is no tag before it, so the range must cover the whole history.
+    const git = fakeGit(args => {
+      if (args[0] === 'describe') return args[3] === 'HEAD' ? 'v1.0.0\n' : reject() // v1.0.0^ has no tag
+      if (args[0] === 'rev-parse') return 'samesha\n' // tag and HEAD are the same commit
+      return reject()
+    })
+    expect(await resolveRange(git, { sinceLastTag: true })).toEqual({ from: EMPTY_TREE, to: 'HEAD' })
+  })
+
+  it('steps back to the previous tag when HEAD is already tagged', async () => {
+    // Second release: describe(HEAD) -> v2.0.0 (== HEAD), so use the tag before it.
+    const git = fakeGit(args => {
+      if (args[0] === 'describe') return args[3] === 'HEAD' ? 'v2.0.0\n' : 'v1.0.0\n'
+      if (args[0] === 'rev-parse') return 'samesha\n'
+      return reject()
+    })
+    expect(await resolveRange(git, { sinceLastTag: true })).toEqual({ from: 'v1.0.0', to: 'HEAD' })
   })
 })
 
@@ -63,13 +98,12 @@ describe('resolveCiRange', () => {
     expect(await resolveCiRange(git, ctx({ tag: 'v1.1.0' }))).toEqual({ from: 'v1.0.0', to: 'v1.1.0' })
   })
 
-  it('first-tag build → root commit .. tag', async () => {
-    const git = fakeGit(args => {
-      if (args[0] === 'describe') return reject()
-      if (args[0] === 'rev-list') return 'rootsha\n'
-      return reject()
-    })
-    expect(await resolveCiRange(git, ctx({ tag: 'v1.0.0' }))).toEqual({ from: 'rootsha', to: 'v1.0.0' })
+  // The root commit is NOT a usable `from`: `<root>..<tag>` is half-open, so it drops the
+  // root commit and the whole initial import — and is completely empty in a single-commit
+  // repo. The empty tree is the only anchor that includes it.
+  it('first-tag build → empty tree .. tag', async () => {
+    const git = fakeGit(args => (args[0] === 'describe' ? reject() : reject()))
+    expect(await resolveCiRange(git, ctx({ tag: 'v1.0.0' }))).toEqual({ from: EMPTY_TREE, to: 'v1.0.0' })
   })
 
   it('PR build prefers origin/<base> when it resolves', async () => {
