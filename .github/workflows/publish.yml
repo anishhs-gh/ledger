@@ -82,8 +82,13 @@ jobs:
         run: npm publish --provenance --access public --tag "${{ github.event.inputs.dist-tag }}"
 
       # Dogfood: generate this release's notes with ledger ITSELF, run from the freshly
-      # built source (dist/cli.js) — NOT the published npm package. Range is previous tag
-      # → HEAD (the new tag isn't created until the next step); root commit on first release.
+      # built source (dist/cli.js) — NOT the published npm package. The range is left to
+      # ledger's own --since-last-tag resolution: previous tag → HEAD normally (the new tag
+      # isn't created until the next step), and the whole history including the root commit
+      # on a first release. Do NOT re-derive the range in shell here — anchoring to the root
+      # commit is wrong, because `<root>..HEAD` is half-open and silently drops the root
+      # commit and the entire initial import (and is completely empty in a single-commit
+      # repo, which is what made first releases always fall through to the fallback below).
       # The notes are written to the runner's temp dir ($RUNNER_TEMP), NOT the repo — it is
       # a throwaway file passed to `gh release create`; nothing is committed or pushed.
       # Uses AWS Bedrock; set the BEDROCK_API_KEY secret (and optionally AWS_REGION /
@@ -107,16 +112,14 @@ jobs:
             exit 0
           fi
 
-          prev="$(git describe --tags --abbrev=0 2>/dev/null || true)"
-          if [ -n "$prev" ]; then
-            echo "Generating notes for ${prev}..HEAD"
-            from="$prev"
-          else
-            from="$(git rev-list --max-parents=0 HEAD | tail -1)"
-            echo "First release — generating notes for root (${from})..HEAD"
-          fi
-
-          if node dist/cli.js generate --from "$from" --to HEAD --output-file "$notes_file" --quiet && [ -s "$notes_file" ]; then
+          # --fail-on-empty so an empty range is a loud failure into the fallback rather
+          # than a silent exit-0 that writes no file. ledger logs the range it resolved.
+          if node dist/cli.js generate \
+               --since-last-tag \
+               --to HEAD \
+               --output-file "$notes_file" \
+               --fail-on-empty \
+             && [ -s "$notes_file" ]; then
             echo "generated=true" >> "$GITHUB_OUTPUT"
           else
             echo "::warning::ledger note generation failed — falling back to GitHub auto-generated notes."

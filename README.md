@@ -96,13 +96,15 @@ ledger generate [options]
 
 | Flag | Description |
 | --- | --- |
-| `--since-last-tag` | From the last git tag to `HEAD` (default when no range is given) |
+| `--since-last-tag` | From the last git tag to `HEAD` (default when no range is given). On a **first release** — no tags yet, or the only tag is the one you just cut on `HEAD` — it covers the entire history instead, root commit included |
 | `--from <ref>` | Start from a tag, branch, or SHA |
 | `--to <ref>` | End ref (default: `HEAD`) |
 | `--last <n>` | Include the last N commits (clamped to available history — asking for more than exist just includes everything back to the first commit) |
 
 In CI, if you pass **no** range flag, `ledger` derives one automatically:
 a tag build uses *previous tag → this tag*; a PR/MR build uses *base branch → HEAD*.
+On the **first** tag build there is no previous tag, so the range covers the whole
+history — the root commit and everything it introduced are included, not skipped.
 
 ### Output & behaviour
 
@@ -302,7 +304,7 @@ jobs:
 ```
 
 > Pin the action to the floating `anishhs-gh/ledger@v1` tag (or a specific release, e.g.
-> `anishhs-gh/ledger@v1.0.0`) to control when you pick up updates.
+> `anishhs-gh/ledger@v1.1.0`) to control when you pick up updates.
 
 **Action inputs** — all optional; anything you omit is read from the committed `ledger.config.yaml`.
 Set them here only to override the file for this workflow:
@@ -317,7 +319,7 @@ Set them here only to override the file for this workflow:
 | `output` | `markdown` | `markdown` \| `json` |
 | `output-file` | — | Write notes to this file |
 | `args` | — | Extra raw flags, e.g. `--since-last-tag --fail-on-empty` |
-| `package` | `@anishhs/ledger` | npm spec to run (pin a version if you like, e.g. `@anishhs/ledger@1.0.0`) |
+| `package` | `@anishhs/ledger` | npm spec to run (pin a version if you like, e.g. `@anishhs/ledger@1.1.0`) |
 
 Output: `file` — the path written (equals `output-file`).
 

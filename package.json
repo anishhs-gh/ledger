@@ -1,6 +1,6 @@
 {
   "name": "@anishhs/ledger",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "AI-powered release notes generator — analyses git history and diffs to produce audience-tailored notes. Works locally and in any CI.",
   "bin": {
     "ledger": "dist/cli.js"
@@ -58,7 +58,7 @@
   },
   "dependencies": {
     "commander": "^14.0.0",
-    "js-yaml": "^5.2.0",
+    "js-yaml": "^5.4.1",
     "simple-git": "^3.36.0"
   },
   "devDependencies": {
